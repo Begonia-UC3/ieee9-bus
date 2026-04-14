@@ -8,7 +8,7 @@ spec:
     kind: Ieee9Grid
     plural: ieee9grids
     singular: ieee9-grid
-    openAPISchema: '{"title":"IEEE 9-Bus Grid","type":"object","properties":{"imageTag":{"description":"Override image tag for all services. Defaults to the chart appVersion.","type":"string","default":""},"replicas":{"description":"Replica count applied to every service.","type":"integer","minimum":0,"default":1},"ingressEnabled":{"description":"Expose grid-central via Ingress.","type":"boolean","default":false},"ingressHost":{"description":"Ingress host when enabled.","type":"string","default":"ieee9.example.com"},"ingressClassName":{"description":"Optional IngressClass name.","type":"string","default":""}}}'
+    openAPISchema: '{"title":"IEEE 9-Bus Grid","type":"object","properties":{"imageTag":{"description":"Override image tag for all services. Defaults to the chart appVersion.","type":"string","default":""},"replicas":{"description":"Replica count applied to every service.","type":"integer","minimum":0,"default":1},"ingressEnabled":{"description":"Expose grid-central via Ingress.","type":"boolean","default":false},"ingressHost":{"description":"Ingress host when enabled.","type":"string","default":"ieee9.example.com"},"ingressClassName":{"description":"Optional IngressClass name.","type":"string","default":""},"tlsEnabled":{"description":"Issue an LE certificate via cert-manager when ingress is enabled.","type":"boolean","default":true},"tlsClusterIssuer":{"description":"cert-manager ClusterIssuer used for the certificate.","type":"string","default":"letsencrypt-prod"}}}'
   release:
     chartRef:
       kind: HelmChart
@@ -42,3 +42,7 @@ spec:
         - ingressHost
       - - spec
         - ingressClassName
+      - - spec
+        - tlsEnabled
+      - - spec
+        - tlsClusterIssuer

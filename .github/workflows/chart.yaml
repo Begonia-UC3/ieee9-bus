@@ -1,16 +1,18 @@
-name: Publish Helm chart
+name: Lint charts
 
 on:
   push:
     branches: [main]
     paths:
-      - 'charts/**'
       - 'packages/**'
+      - 'init.yaml'
+      - 'scripts/**'
       - '.github/workflows/chart.yaml'
   pull_request:
     paths:
-      - 'charts/**'
       - 'packages/**'
+      - 'init.yaml'
+      - 'scripts/**'
       - '.github/workflows/chart.yaml'
   workflow_dispatch:
 
@@ -20,12 +22,10 @@ concurrency:
 
 permissions:
   contents: read
-  packages: write
-  id-token: write
 
 jobs:
   lint:
-    name: Lint chart
+    name: Helm lint + template
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -34,58 +34,25 @@ jobs:
         with:
           version: v3.16.2
 
-      - name: Helm lint (ieee9-grid)
-        run: helm lint charts/ieee9-grid
-
-      - name: Helm lint (bridge)
+      - name: Lint packages/apps/ieee9-grid
         run: helm lint packages/apps/ieee9-grid
 
-      - name: Helm template (default values)
-        run: |
-          helm template test charts/ieee9-grid > /dev/null
-          helm template test packages/apps/ieee9-grid > /dev/null
+      - name: Lint packages/core/platform
+        run: helm lint packages/core/platform
 
-      - name: Helm template (ingress enabled)
+      - name: Template packages/apps/ieee9-grid (default)
+        run: helm template test packages/apps/ieee9-grid > /dev/null
+
+      - name: Template packages/apps/ieee9-grid (ingress)
         run: |
-          helm template test charts/ieee9-grid \
-            --set ingress.enabled=true \
-            --set ingress.hosts[0].host=ieee9.example.com \
-            --set 'ingress.hosts[0].paths[0].path=/' \
-            --set 'ingress.hosts[0].paths[0].pathType=Prefix' \
-            --set 'ingress.hosts[0].paths[0].service=grid-central' \
-            > /dev/null
           helm template test packages/apps/ieee9-grid \
             --set ingressEnabled=true \
-            --set ingressHost=foo.example \
+            --set ingressHost=ieee9.example.com \
             > /dev/null
 
-  publish:
-    name: Publish to GHCR
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: lint
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v4
+      - name: Template packages/core/platform
+        run: helm template test packages/core/platform > /dev/null
 
-      - uses: azure/setup-helm@v4
-        with:
-          version: v3.16.2
-
-      - name: Login to GHCR
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Package chart
-        id: pkg
+      - name: Validate init.yaml
         run: |
-          helm package charts/ieee9-grid --destination /tmp/charts
-          chart=$(ls /tmp/charts/*.tgz | head -1)
-          echo "file=$chart" >> "$GITHUB_OUTPUT"
-
-      - name: Push chart
-        run: |
-          helm push "${{ steps.pkg.outputs.file }}" \
-            "oci://ghcr.io/${{ github.repository_owner }}/charts"
+          python3 -c "import yaml; list(yaml.safe_load_all(open('init.yaml')))"

@@ -1,0 +1,13 @@
+---
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: HelmChart
+metadata:
+  name: ieee9-bus-ieee9-grid
+  namespace: cozy-public
+spec:
+  interval: 5m
+  chart: ./packages/apps/ieee9-grid
+  sourceRef:
+    kind: GitRepository
+    name: ieee9-bus
+  reconcileStrategy: Revision

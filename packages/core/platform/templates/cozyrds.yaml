@@ -1,0 +1,44 @@
+---
+apiVersion: cozystack.io/v1alpha1
+kind: ApplicationDefinition
+metadata:
+  name: ieee9-grid
+spec:
+  application:
+    kind: Ieee9Grid
+    plural: ieee9grids
+    singular: ieee9-grid
+    openAPISchema: '{"title":"IEEE 9-Bus Grid","type":"object","properties":{"imageTag":{"description":"Override image tag for all services. Defaults to the chart appVersion.","type":"string","default":""},"replicas":{"description":"Replica count applied to every service.","type":"integer","minimum":0,"default":1},"ingressEnabled":{"description":"Expose grid-central via Ingress.","type":"boolean","default":false},"ingressHost":{"description":"Ingress host when enabled.","type":"string","default":"ieee9.example.com"},"ingressClassName":{"description":"Optional IngressClass name.","type":"string","default":""}}}'
+  release:
+    chartRef:
+      kind: HelmChart
+      name: ieee9-bus-ieee9-grid
+      namespace: cozy-public
+    labels:
+      cozystack.io/ui: "true"
+    prefix: grid-
+  dashboard:
+    category: Simulation
+    singular: IEEE 9-Bus Grid
+    plural: IEEE 9-Bus Grids
+    description: IEEE 9-Bus power-grid simulator with diesel, battery and data-center assets.
+    tags:
+      - simulation
+      - power-grid
+      - ieee9
+    keysOrder:
+      - - apiVersion
+      - - kind
+      - - metadata
+      - - metadata
+        - name
+      - - spec
+        - replicas
+      - - spec
+        - imageTag
+      - - spec
+        - ingressEnabled
+      - - spec
+        - ingressHost
+      - - spec
+        - ingressClassName

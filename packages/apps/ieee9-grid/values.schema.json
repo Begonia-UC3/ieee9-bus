@@ -2,14 +2,8 @@
   "title": "IEEE 9-Bus Grid",
   "type": "object",
   "properties": {
-    "chartVersion": {
-      "description": "Version of the ieee9-grid Helm chart to deploy.",
-      "type": "string",
-      "default": "0.1.0",
-      "minLength": 1
-    },
     "imageTag": {
-      "description": "Override image tag for all services (defaults to chart appVersion).",
+      "description": "Override image tag for all services. Defaults to the chart appVersion.",
       "type": "string",
       "default": ""
     },
@@ -20,17 +14,17 @@
       "default": 1
     },
     "ingressEnabled": {
-      "description": "Expose grid-central through an Ingress.",
+      "description": "Expose grid-central via Ingress.",
       "type": "boolean",
       "default": false
     },
     "ingressHost": {
-      "description": "Host used when ingressEnabled is true.",
+      "description": "Ingress host when enabled.",
       "type": "string",
       "default": "ieee9.example.com"
     },
     "ingressClassName": {
-      "description": "Optional IngressClass to bind.",
+      "description": "Optional IngressClass name.",
       "type": "string",
       "default": ""
     }
@@ -42,9 +36,7 @@
         "required": ["ingressEnabled"]
       },
       "then": {
-        "properties": {
-          "ingressHost": { "minLength": 1 }
-        },
+        "properties": { "ingressHost": { "minLength": 1 } },
         "required": ["ingressHost"]
       }
     }

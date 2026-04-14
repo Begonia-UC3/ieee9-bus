@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Data Center — Load Simulator</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&display=swap');
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:'JetBrains Mono',monospace;background:#0a0e17;color:#e2e8f0;padding:20px}
+  h1{font-size:16px;letter-spacing:1px;margin-bottom:4px}
+  .sub{font-size:11px;color:#64748b;margin-bottom:16px}
+  .dot{width:10px;height:10px;border-radius:50%;display:inline-block;margin-right:8px;background:#22c55e;box-shadow:0 0 12px #22c55e}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:20px}
+  .card{background:#111827;border:1px solid #1e293b;border-radius:8px;padding:14px}
+  .card .label{font-size:9px;color:#64748b;letter-spacing:1px;text-transform:uppercase;margin-bottom:4px}
+  .card .value{font-size:22px;font-weight:700;color:#e2e8f0}
+  .card .unit{font-size:11px;color:#64748b;margin-left:4px}
+  .card.highlight{border-color:#22c55e44}
+  .bar-bg{height:6px;background:#1e293b;border-radius:3px;margin-top:8px;overflow:hidden}
+  .bar-fill{height:100%;border-radius:3px;transition:width .5s}
+  .pue-big{font-size:48px;font-weight:700;text-align:center;margin:16px 0;padding:20px;background:#111827;border:1px solid #1e293b;border-radius:12px}
+  .controls{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:20px}
+  .controls label{font-size:11px;color:#94a3b8}
+  .controls input[type=range]{width:250px;accent-color:#22c55e}
+  .breakdown{display:flex;gap:2px;height:20px;border-radius:4px;overflow:hidden;margin:16px 0}
+  .breakdown div{height:100%;transition:width .5s;display:flex;align-items:center;justify-content:center;font-size:8px;color:#fff;font-weight:600}
+</style>
+</head>
+<body>
+<div style="display:flex;align-items:center;margin-bottom:4px">
+  <span class="dot"></span>
+  <h1>DATA CENTER</h1>
+</div>
+<div class="sub">2,000 Racks • 80,000 Servers • Bus 5 (IEEE 9-Bus)</div>
+
+<div class="controls">
+  <label>IT Load Target: <strong id="targetLabel">60%</strong></label>
+  <input type="range" id="loadSlider" min="10" max="100" value="60" step="1">
+</div>
+
+<!-- PUE Display -->
+<div class="pue-big">
+  PUE <span id="vPue" style="color:#22c55e">1.450</span>
+</div>
+
+<!-- Power breakdown bar -->
+<div style="font-size:10px;color:#64748b;margin-bottom:4px">POWER BREAKDOWN</div>
+<div class="breakdown" id="breakdown">
+  <div style="background:#3b82f6;width:60%" id="brkIT">IT</div>
+  <div style="background:#06b6d4;width:25%" id="brkCool">Cool</div>
+  <div style="background:#f59e0b;width:10%" id="brkUPS">UPS</div>
+  <div style="background:#64748b;width:5%" id="brkMisc">Misc</div>
+</div>
+
+<div class="grid">
+  <div class="card highlight">
+    <div class="label">Total Facility Load</div>
+    <div class="value" id="vTotal">0<span class="unit">MW</span></div>
+    <div class="bar-bg"><div class="bar-fill" id="barTotal" style="background:#22c55e;width:0%"></div></div>
+  </div>
+  <div class="card">
+    <div class="label">IT Load</div>
+    <div class="value" id="vIT">0<span class="unit">MW</span></div>
+    <div class="bar-bg"><div class="bar-fill" id="barIT" style="background:#3b82f6;width:0%"></div></div>
+  </div>
+  <div class="card">
+    <div class="label">Cooling Load</div>
+    <div class="value" id="vCooling">0<span class="unit">MW</span></div>
+  </div>
+  <div class="card">
+    <div class="label">Server Utilization</div>
+    <div class="value" id="vUtil">0<span class="unit">%</span></div>
+    <div class="bar-bg"><div class="bar-fill" id="barUtil" style="background:#8b5cf6;width:0%"></div></div>
+  </div>
+  <div class="card">
+    <div class="label">Active Servers</div>
+    <div class="value" id="vServers">0</div>
+  </div>
+  <div class="card">
+    <div class="label">Ambient Temp</div>
+    <div class="value" id="vAmbient">30<span class="unit">°C</span></div>
+  </div>
+  <div class="card">
+    <div class="label">Supply / Return</div>
+    <div class="value" id="vTemps" style="font-size:16px">18 / 32<span class="unit">°C</span></div>
+  </div>
+  <div class="card">
+    <div class="label">Network Throughput</div>
+    <div class="value" id="vNet">0<span class="unit">Gbps</span></div>
+  </div>
+</div>
+
+<script>
+const slider = document.getElementById("loadSlider");
+slider.oninput = () => { document.getElementById("targetLabel").textContent = slider.value + "%"; };
+slider.onchange = () => sendCmd({it_load_pct: parseFloat(slider.value)});
+
+let ws;
+function connect() {
+  const proto = location.protocol==="https:"?"wss:":"ws:";
+  ws = new WebSocket(`${proto}//${location.host}/ws`);
+  ws.onclose = () => setTimeout(connect, 2000);
+  ws.onmessage = (e) => {
+    const d = JSON.parse(e.data);
+    const pueColor = d.pue < 1.4 ? "#22c55e" : d.pue < 1.6 ? "#f59e0b" : "#ef4444";
+    document.getElementById("vPue").textContent = d.pue.toFixed(3);
+    document.getElementById("vPue").style.color = pueColor;
+
+    document.getElementById("vTotal").innerHTML = d.total_load_mw.toFixed(1)+'<span class="unit">MW</span>';
+    document.getElementById("barTotal").style.width = (d.total_load_mw/125*100)+"%";
+    document.getElementById("vIT").innerHTML = d.it_load_mw.toFixed(1)+'<span class="unit">MW</span>';
+    document.getElementById("barIT").style.width = (d.it_load_mw/80*100)+"%";
+    document.getElementById("vCooling").innerHTML = d.cooling_load_mw.toFixed(1)+'<span class="unit">MW</span>';
+    document.getElementById("vUtil").innerHTML = d.it_load_pct.toFixed(1)+'<span class="unit">%</span>';
+    document.getElementById("barUtil").style.width = d.it_load_pct+"%";
+    document.getElementById("vServers").textContent = d.active_servers.toLocaleString();
+    document.getElementById("vAmbient").innerHTML = d.ambient_temp_c.toFixed(1)+'<span class="unit">°C</span>';
+    document.getElementById("vTemps").innerHTML = d.supply_temp_c.toFixed(0)+' / '+d.return_temp_c.toFixed(0)+'<span class="unit">°C</span>';
+    document.getElementById("vNet").innerHTML = d.network_gbps.toFixed(0)+'<span class="unit">Gbps</span>';
+
+    // Breakdown bar
+    const total = d.total_load_mw || 1;
+    document.getElementById("brkIT").style.width = (d.it_load_mw/total*100)+"%";
+    document.getElementById("brkCool").style.width = (d.cooling_load_mw/total*100)+"%";
+    document.getElementById("brkUPS").style.width = (d.ups_loss_mw/total*100)+"%";
+    document.getElementById("brkMisc").style.width = (d.lighting_misc_mw/total*100)+"%";
+  };
+}
+function sendCmd(obj) { if (ws && ws.readyState===1) ws.send(JSON.stringify(obj)); }
+connect();
+</script>
+</body>
+</html>

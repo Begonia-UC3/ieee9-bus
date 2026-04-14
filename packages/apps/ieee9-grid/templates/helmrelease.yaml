@@ -1,0 +1,47 @@
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: HelmRepository
+metadata:
+  name: ieee9-grid
+spec:
+  type: oci
+  interval: 10m
+  url: oci://ghcr.io/begonia-uc3/charts
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: {{ .Release.Name }}
+spec:
+  interval: 5m
+  chart:
+    spec:
+      chart: ieee9-grid
+      version: {{ .Values.chartVersion | quote }}
+      sourceRef:
+        kind: HelmRepository
+        name: ieee9-grid
+  values:
+    {{- if .Values.imageTag }}
+    image:
+      tag: {{ .Values.imageTag | quote }}
+    {{- end }}
+    services:
+      grid-central:
+        replicas: {{ .Values.replicas }}
+      diesel-gen:
+        replicas: {{ .Values.replicas }}
+      battery:
+        replicas: {{ .Values.replicas }}
+      datacenter:
+        replicas: {{ .Values.replicas }}
+    {{- if .Values.ingressEnabled }}
+    ingress:
+      enabled: true
+      className: {{ .Values.ingressClassName | quote }}
+      hosts:
+        - host: {{ .Values.ingressHost | quote }}
+          paths:
+            - path: /
+              pathType: Prefix
+              service: grid-central
+    {{- end }}

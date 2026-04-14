@@ -1,0 +1,21 @@
+IEEE 9-Bus grid simulator deployed as release {{ .Release.Name }} in namespace {{ .Release.Namespace }}.
+
+Services:
+{{- range $component, $svc := .Values.services }}
+{{- if $svc.enabled }}
+  - {{ $component }} on port {{ $svc.port }}
+{{- end }}
+{{- end }}
+
+Port-forward the central dashboard:
+
+  kubectl --namespace {{ .Release.Namespace }} port-forward svc/grid-central 8000:{{ (index .Values.services "grid-central").port }}
+
+Then open http://localhost:8000
+{{- if .Values.ingress.enabled }}
+
+Ingress hosts:
+{{- range .Values.ingress.hosts }}
+  - http://{{ .host }}
+{{- end }}
+{{- end }}

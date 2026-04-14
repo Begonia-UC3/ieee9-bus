@@ -1,0 +1,6 @@
+apiVersion: v2
+name: ieee9-grid
+description: IEEE 9-Bus grid simulator for Cozystack — central power-flow engine with three asset simulators (diesel, battery, data center)
+type: application
+version: 0.0.0
+appVersion: "0.1.0"

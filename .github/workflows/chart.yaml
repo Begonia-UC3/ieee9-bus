@@ -5,10 +5,12 @@ on:
     branches: [main]
     paths:
       - 'charts/**'
+      - 'packages/**'
       - '.github/workflows/chart.yaml'
   pull_request:
     paths:
       - 'charts/**'
+      - 'packages/**'
       - '.github/workflows/chart.yaml'
   workflow_dispatch:
 
@@ -32,11 +34,16 @@ jobs:
         with:
           version: v3.16.2
 
-      - name: Helm lint
+      - name: Helm lint (ieee9-grid)
         run: helm lint charts/ieee9-grid
 
+      - name: Helm lint (bridge)
+        run: helm lint packages/apps/ieee9-grid
+
       - name: Helm template (default values)
-        run: helm template test charts/ieee9-grid > /dev/null
+        run: |
+          helm template test charts/ieee9-grid > /dev/null
+          helm template test packages/apps/ieee9-grid > /dev/null
 
       - name: Helm template (ingress enabled)
         run: |
@@ -46,6 +53,10 @@ jobs:
             --set 'ingress.hosts[0].paths[0].path=/' \
             --set 'ingress.hosts[0].paths[0].pathType=Prefix' \
             --set 'ingress.hosts[0].paths[0].service=grid-central' \
+            > /dev/null
+          helm template test packages/apps/ieee9-grid \
+            --set ingressEnabled=true \
+            --set ingressHost=foo.example \
             > /dev/null
 
   publish:

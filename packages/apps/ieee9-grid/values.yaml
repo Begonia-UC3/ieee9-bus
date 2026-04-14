@@ -1,0 +1,23 @@
+## @section Chart source
+
+## @param {string} chartVersion=0.1.0 - Version of the ieee9-grid Helm chart to deploy.
+chartVersion: "0.1.0"
+
+## @param {string} imageTag="" - Override image tag for all services (defaults to chart appVersion).
+imageTag: ""
+
+## @section Services
+
+## @param {int} replicas=1 - Replica count applied to every service.
+replicas: 1
+
+## @section Ingress
+
+## @param {boolean} ingressEnabled=false - Expose grid-central through an Ingress.
+ingressEnabled: false
+
+## @param {string} ingressHost=ieee9.example.com - Host used when ingressEnabled is true.
+ingressHost: "ieee9.example.com"
+
+## @param {string} ingressClassName="" - Optional IngressClass to bind.
+ingressClassName: ""

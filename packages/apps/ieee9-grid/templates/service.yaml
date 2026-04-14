@@ -1,5 +1,4 @@
-{{- range $component, $svc := .Values.services }}
-{{- if $svc.enabled }}
+{{- range $component := (list "grid-central" "diesel-gen" "battery" "datacenter") }}
 ---
 apiVersion: v1
 kind: Service
@@ -13,8 +12,7 @@ spec:
     {{- include "ieee9-grid.selectorLabels" (dict "ctx" $ "component" $component) | nindent 4 }}
   ports:
     - name: http
-      port: {{ $svc.port }}
+      port: 8000
       targetPort: http
       protocol: TCP
-{{- end }}
 {{- end }}

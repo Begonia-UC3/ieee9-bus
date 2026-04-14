@@ -1,0 +1,29 @@
+---
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: GitRepository
+metadata:
+  name: ieee9-bus
+  namespace: cozy-public
+spec:
+  interval: 1m0s
+  ref:
+    branch: main
+  timeout: 60s
+  url: https://github.com/Begonia-UC3/ieee9-bus.git
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: ieee9-bus-platform
+  namespace: cozy-system
+spec:
+  interval: 5m
+  targetNamespace: cozy-system
+  chart:
+    spec:
+      chart: ./packages/core/platform
+      sourceRef:
+        kind: GitRepository
+        name: ieee9-bus
+        namespace: cozy-public
+      version: '*'

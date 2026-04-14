@@ -37,7 +37,12 @@ telemetry and receive setpoints.
 ├── diesel-gen/         # FastAPI — diesel generator physics
 ├── battery/            # FastAPI — BESS physics
 ├── datacenter/         # FastAPI — data-center load model
-├── charts/ieee9-grid/  # Helm chart deploying all four services
+├── init.yaml           # bootstrap GitRepository + HelmRelease for Cozystack
+├── packages/
+│   ├── core/platform/  # chart registering the ApplicationDefinition + HelmChart
+│   └── apps/ieee9-grid/# chart rendering the four Deployments + Services
+├── scripts/
+│   └── package.mk      # cozyhr apply/diff/delete helpers
 ├── deploy/
 │   └── compose.yaml    # local dev via docker/podman compose
 └── .github/workflows/  # image + chart publishing to GHCR
@@ -58,19 +63,35 @@ docker compose up --build
 - <http://localhost:8002> — battery BESS
 - <http://localhost:8003> — data center
 
-## Kubernetes — Helm
+## Cozystack
+
+The app is packaged as a Cozystack external-app. Bootstrap once per
+cluster:
 
 ```bash
-helm install ieee9 \
-  oci://ghcr.io/begonia-uc3/charts/ieee9-grid \
-  --version 0.1.0
-
-kubectl port-forward svc/grid-central 8000:8000
-open http://localhost:8000
+kubectl apply --filename init.yaml
 ```
 
-See [`charts/ieee9-grid/README.md`](charts/ieee9-grid/README.md) for the
-values reference.
+That creates a Flux `GitRepository` pointing at this repo and a
+`HelmRelease` that deploys `packages/core/platform`, which in turn
+registers the `ieee9-grid` `ApplicationDefinition` + the `HelmChart`
+source. Afterwards the **IEEE 9-Bus Grid** entry appears in the
+Cozystack dashboard (category: Simulation) and can be instantiated
+from the UI or via:
+
+```yaml
+apiVersion: apps.cozystack.io/v1alpha1
+kind: Ieee9Grid
+metadata:
+  name: demo
+  namespace: tenant-root
+spec:
+  replicas: 1
+  ingressEnabled: false
+```
+
+The dashboard-exposed schema matches
+[`packages/apps/ieee9-grid/values.schema.json`](packages/apps/ieee9-grid/values.schema.json).
 
 ## Images
 

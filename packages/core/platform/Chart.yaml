@@ -1,0 +1,4 @@
+apiVersion: v2
+name: ieee9-bus-platform
+description: Platform chart registering the IEEE 9-Bus Grid application with Cozystack
+version: 0.0.0

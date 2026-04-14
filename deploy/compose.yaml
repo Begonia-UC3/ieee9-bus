@@ -1,0 +1,57 @@
+services:
+  grid-central:
+    build:
+      context: ../grid-central
+      dockerfile: Containerfile
+    ports:
+      - "8000:8000"
+    environment:
+      PYTHONUNBUFFERED: "1"
+    networks: [grid-net]
+    restart: unless-stopped
+
+  diesel-gen:
+    build:
+      context: ../diesel-gen
+      dockerfile: Containerfile
+    ports:
+      - "8001:8000"
+    environment:
+      GRID_CENTRAL_URL: http://grid-central:8000
+      TICK_INTERVAL: "1.0"
+      PYTHONUNBUFFERED: "1"
+    depends_on: [grid-central]
+    networks: [grid-net]
+    restart: unless-stopped
+
+  battery:
+    build:
+      context: ../battery
+      dockerfile: Containerfile
+    ports:
+      - "8002:8000"
+    environment:
+      GRID_CENTRAL_URL: http://grid-central:8000
+      TICK_INTERVAL: "1.0"
+      PYTHONUNBUFFERED: "1"
+    depends_on: [grid-central]
+    networks: [grid-net]
+    restart: unless-stopped
+
+  datacenter:
+    build:
+      context: ../datacenter
+      dockerfile: Containerfile
+    ports:
+      - "8003:8000"
+    environment:
+      GRID_CENTRAL_URL: http://grid-central:8000
+      TICK_INTERVAL: "1.0"
+      PYTHONUNBUFFERED: "1"
+    depends_on: [grid-central]
+    networks: [grid-net]
+    restart: unless-stopped
+
+networks:
+  grid-net:
+    driver: bridge

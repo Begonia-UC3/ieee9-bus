@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Battery BESS — Simulator</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&display=swap');
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:'JetBrains Mono',monospace;background:#0a0e17;color:#e2e8f0;padding:20px}
+  h1{font-size:16px;letter-spacing:1px;margin-bottom:4px}
+  .sub{font-size:11px;color:#64748b;margin-bottom:16px}
+  .dot{width:10px;height:10px;border-radius:50%;display:inline-block;margin-right:8px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:20px}
+  .card{background:#111827;border:1px solid #1e293b;border-radius:8px;padding:14px}
+  .card .label{font-size:9px;color:#64748b;letter-spacing:1px;text-transform:uppercase;margin-bottom:4px}
+  .card .value{font-size:22px;font-weight:700;color:#e2e8f0}
+  .card .unit{font-size:11px;color:#64748b;margin-left:4px}
+  .bar-bg{height:6px;background:#1e293b;border-radius:3px;margin-top:8px;overflow:hidden}
+  .bar-fill{height:100%;border-radius:3px;transition:width .5s}
+  .soc-bar{height:24px;background:#1e293b;border-radius:6px;margin:16px 0;overflow:hidden;position:relative}
+  .soc-fill{height:100%;border-radius:6px;transition:width .5s}
+  .soc-text{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:12px;font-weight:700;z-index:1}
+  .controls{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:20px}
+  .controls label{font-size:11px;color:#94a3b8}
+  .controls input[type=range]{width:250px;accent-color:#8b5cf6}
+  .controls button{padding:6px 16px;border-radius:5px;border:1px solid #334155;background:#1e293b;color:#94a3b8;cursor:pointer;font-family:inherit;font-size:11px}
+  .mode-badge{padding:4px 12px;border-radius:12px;font-size:11px;font-weight:600;display:inline-block;margin-bottom:16px}
+</style>
+</head>
+<body>
+<div style="display:flex;align-items:center;margin-bottom:4px">
+  <span class="dot" id="statusDot" style="background:#8b5cf6;box-shadow:0 0 12px #8b5cf6"></span>
+  <h1>BATTERY ENERGY STORAGE</h1>
+</div>
+<div class="sub">85 MW / 340 MWh Li-ion NMC • Bus 3 (IEEE 9-Bus)</div>
+
+<div class="mode-badge" id="modeBadge" style="background:#1e293b;color:#64748b">IDLE</div>
+
+<!-- SoC Bar -->
+<div style="font-size:10px;color:#64748b;margin-bottom:4px">STATE OF CHARGE</div>
+<div class="soc-bar">
+  <div class="soc-fill" id="socFill" style="background:linear-gradient(90deg,#ef4444,#f59e0b,#0fa968);width:65%"></div>
+  <div class="soc-text" id="socText">65.0%</div>
+</div>
+
+<div class="controls">
+  <label>Power: <strong id="targetLabel">0 MW</strong></label>
+  <input type="range" id="powerSlider" min="-85" max="85" value="0" step="1">
+  <span style="font-size:10px;color:#475569">← charge | discharge →</span>
+  <button onclick="document.getElementById('powerSlider').value=0;sendCmd({target_power_mw:0})">IDLE</button>
+</div>
+
+<div class="grid">
+  <div class="card">
+    <div class="label">Power</div>
+    <div class="value" id="vPower">0<span class="unit">MW</span></div>
+    <div class="bar-bg"><div class="bar-fill" id="barPower" style="background:#8b5cf6;width:0%"></div></div>
+  </div>
+  <div class="card">
+    <div class="label">SoC Energy</div>
+    <div class="value" id="vEnergy">221<span class="unit">MWh</span></div>
+  </div>
+  <div class="card">
+    <div class="label">Pack Voltage</div>
+    <div class="value" id="vVoltage">1500<span class="unit">V DC</span></div>
+  </div>
+  <div class="card">
+    <div class="label">Pack Current</div>
+    <div class="value" id="vCurrent">0<span class="unit">A</span></div>
+  </div>
+  <div class="card">
+    <div class="label">Cell Temperature</div>
+    <div class="value" id="vTemp">25<span class="unit">°C</span></div>
+    <div class="bar-bg"><div class="bar-fill" id="barTemp" style="background:#f59e0b;width:25%"></div></div>
+  </div>
+  <div class="card">
+    <div class="label">State of Health</div>
+    <div class="value" id="vSoH">98.5<span class="unit">%</span></div>
+  </div>
+  <div class="card">
+    <div class="label">Cycle Count</div>
+    <div class="value" id="vCycles">42</div>
+  </div>
+  <div class="card">
+    <div class="label">HVAC Cooling</div>
+    <div class="value" id="vHvac">50<span class="unit">kW</span></div>
+  </div>
+</div>
+
+<script>
+const slider = document.getElementById("powerSlider");
+const label = document.getElementById("targetLabel");
+slider.oninput = () => {
+  const v = parseFloat(slider.value);
+  label.textContent = (v > 0 ? "+" : "") + v + " MW";
+};
+slider.onchange = () => sendCmd({target_power_mw: parseFloat(slider.value)});
+
+const MODE_STYLES = {
+  charging: {bg:"#1e3a5f",color:"#60a5fa",text:"⚡ CHARGING"},
+  discharging: {bg:"#3b1c1c",color:"#f87171",text:"🔋 DISCHARGING"},
+  idle: {bg:"#1e293b",color:"#64748b",text:"IDLE"},
+};
+
+let ws;
+function connect() {
+  const proto = location.protocol==="https:"?"wss:":"ws:";
+  ws = new WebSocket(`${proto}//${location.host}/ws`);
+  ws.onclose = () => setTimeout(connect, 2000);
+  ws.onmessage = (e) => {
+    const d = JSON.parse(e.data);
+    const m = MODE_STYLES[d.mode] || MODE_STYLES.idle;
+    const badge = document.getElementById("modeBadge");
+    badge.textContent = m.text; badge.style.background = m.bg; badge.style.color = m.color;
+
+    document.getElementById("socFill").style.width = d.soc_pct + "%";
+    document.getElementById("socText").textContent = d.soc_pct.toFixed(1) + "%";
+
+    const socColor = d.soc_pct < 20 ? "#ef4444" : d.soc_pct < 40 ? "#f59e0b" : "#0fa968";
+    document.getElementById("socFill").style.background = socColor;
+
+    document.getElementById("vPower").innerHTML = Math.abs(d.actual_power_mw).toFixed(1) + '<span class="unit">MW</span>';
+    document.getElementById("barPower").style.width = (Math.abs(d.actual_power_mw)/85*100)+"%";
+    document.getElementById("barPower").style.background = d.actual_power_mw < 0 ? "#60a5fa" : "#f87171";
+    document.getElementById("vEnergy").innerHTML = d.soc_mwh.toFixed(0) + '<span class="unit">MWh</span>';
+    document.getElementById("vVoltage").innerHTML = d.pack_voltage_v.toFixed(0) + '<span class="unit">V DC</span>';
+    document.getElementById("vCurrent").innerHTML = Math.abs(d.pack_current_a).toFixed(0) + '<span class="unit">A</span>';
+    document.getElementById("vTemp").innerHTML = d.cell_temp_c.toFixed(1) + '<span class="unit">°C</span>';
+    document.getElementById("barTemp").style.width = (d.cell_temp_c/60*100)+"%";
+    document.getElementById("barTemp").style.background = d.cell_temp_c > 40 ? "#ef4444" : "#f59e0b";
+    document.getElementById("vSoH").innerHTML = d.soh_pct.toFixed(1) + '<span class="unit">%</span>';
+    document.getElementById("vCycles").textContent = d.cycle_count.toFixed(0);
+    document.getElementById("vHvac").innerHTML = d.hvac_power_kw.toFixed(0) + '<span class="unit">kW</span>';
+  };
+}
+
+function sendCmd(obj) { if (ws && ws.readyState===1) ws.send(JSON.stringify(obj)); }
+connect();
+</script>
+</body>
+</html>

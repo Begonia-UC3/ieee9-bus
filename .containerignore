@@ -1,0 +1,16 @@
+.git/
+.github/
+.gitattributes
+.gitignore
+.containerignore
+README.md
+charts/
+deploy/
+*.tar.gz
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/

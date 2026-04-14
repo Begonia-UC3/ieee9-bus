@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Diesel Generator — Simulator</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&display=swap');
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:'JetBrains Mono',monospace;background:#0a0e17;color:#e2e8f0;padding:20px}
+  h1{font-size:16px;letter-spacing:1px;margin-bottom:4px}
+  .sub{font-size:11px;color:#64748b;margin-bottom:16px}
+  .dot{width:10px;height:10px;border-radius:50%;display:inline-block;margin-right:8px}
+  .dot.on{background:#0fa968;box-shadow:0 0 12px #0fa968} .dot.off{background:#ef4444;box-shadow:0 0 8px #ef4444}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:20px}
+  .card{background:#111827;border:1px solid #1e293b;border-radius:8px;padding:14px}
+  .card .label{font-size:9px;color:#64748b;letter-spacing:1px;text-transform:uppercase;margin-bottom:4px}
+  .card .value{font-size:22px;font-weight:700;color:#e2e8f0}
+  .card .unit{font-size:11px;color:#64748b;margin-left:4px}
+  .bar-bg{height:6px;background:#1e293b;border-radius:3px;margin-top:8px;overflow:hidden}
+  .bar-fill{height:100%;border-radius:3px;transition:width .5s}
+  .controls{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:20px}
+  .controls label{font-size:11px;color:#94a3b8}
+  .controls input[type=range]{width:200px;accent-color:#f59e0b}
+  .controls button{padding:6px 16px;border-radius:5px;border:1px solid #334155;background:#1e293b;color:#94a3b8;cursor:pointer;font-family:inherit;font-size:11px}
+  .controls button.active{background:#0fa968;color:#fff;border-color:#0fa968}
+  .controls button.stop{background:#ef4444;color:#fff;border-color:#ef4444}
+  .status-bar{display:flex;gap:16px;padding:10px 14px;background:#111827;border-radius:8px;border:1px solid #1e293b;font-size:11px;flex-wrap:wrap;margin-bottom:16px}
+  .status-bar .item{color:#94a3b8} .status-bar .item span{color:#e2e8f0;font-weight:600}
+</style>
+</head>
+<body>
+<div style="display:flex;align-items:center;margin-bottom:4px">
+  <span class="dot on" id="statusDot"></span>
+  <h1>DIESEL GENERATOR</h1>
+</div>
+<div class="sub">163 MW Wärtsilä-class • 20-Cylinder • Bus 2 (IEEE 9-Bus)</div>
+
+<div class="status-bar" id="statusBar">
+  <div class="item">RPM: <span id="sRpm">—</span></div>
+  <div class="item">Freq: <span id="sFreq">—</span> Hz</div>
+  <div class="item">Voltage: <span id="sVolt">—</span> kV</div>
+  <div class="item">Runtime: <span id="sRuntime">—</span> h</div>
+</div>
+
+<div class="controls">
+  <label>Load Target: <strong id="targetLabel">75%</strong></label>
+  <input type="range" id="loadSlider" min="0" max="110" value="75" step="1">
+  <button id="btnStart" class="active" onclick="sendCmd({running:true})">▶ START</button>
+  <button id="btnStop" onclick="sendCmd({running:false})">⏹ STOP</button>
+</div>
+
+<div class="grid">
+  <div class="card">
+    <div class="label">Power Output</div>
+    <div class="value" id="vPower">0<span class="unit">MW</span></div>
+    <div class="bar-bg"><div class="bar-fill" id="barPower" style="background:#0fa968;width:0%"></div></div>
+  </div>
+  <div class="card">
+    <div class="label">Load</div>
+    <div class="value" id="vLoad">0<span class="unit">%</span></div>
+    <div class="bar-bg"><div class="bar-fill" id="barLoad" style="background:#3b82f6;width:0%"></div></div>
+  </div>
+  <div class="card">
+    <div class="label">Fuel Consumption</div>
+    <div class="value" id="vFuel">0<span class="unit">L/h</span></div>
+  </div>
+  <div class="card">
+    <div class="label">Exhaust Temp</div>
+    <div class="value" id="vExhaust">25<span class="unit">°C</span></div>
+    <div class="bar-bg"><div class="bar-fill" id="barExhaust" style="background:#f59e0b;width:0%"></div></div>
+  </div>
+  <div class="card">
+    <div class="label">Coolant Temp</div>
+    <div class="value" id="vCoolant">25<span class="unit">°C</span></div>
+    <div class="bar-bg"><div class="bar-fill" id="barCoolant" style="background:#3b82f6;width:0%"></div></div>
+  </div>
+  <div class="card">
+    <div class="label">Oil Pressure</div>
+    <div class="value" id="vOil">0<span class="unit">bar</span></div>
+  </div>
+</div>
+
+<script>
+const slider = document.getElementById("loadSlider");
+const targetLabel = document.getElementById("targetLabel");
+slider.oninput = () => { targetLabel.textContent = slider.value + "%"; };
+slider.onchange = () => { sendCmd({target_load_pct: parseFloat(slider.value)}); };
+
+let ws;
+function connect() {
+  const proto = location.protocol === "https:" ? "wss:" : "ws:";
+  ws = new WebSocket(`${proto}//${location.host}/ws`);
+  ws.onopen = () => { document.getElementById("statusDot").className = "dot on"; };
+  ws.onclose = () => { document.getElementById("statusDot").className = "dot off"; setTimeout(connect, 2000); };
+  ws.onmessage = (e) => {
+    const d = JSON.parse(e.data);
+    document.getElementById("vPower").innerHTML = d.p_gen_mw.toFixed(1) + '<span class="unit">MW</span>';
+    document.getElementById("vLoad").innerHTML = d.actual_load_pct.toFixed(1) + '<span class="unit">%</span>';
+    document.getElementById("vFuel").innerHTML = d.fuel_rate_lph.toFixed(0) + '<span class="unit">L/h</span>';
+    document.getElementById("vExhaust").innerHTML = d.exhaust_temp_c.toFixed(0) + '<span class="unit">°C</span>';
+    document.getElementById("vCoolant").innerHTML = d.coolant_temp_c.toFixed(0) + '<span class="unit">°C</span>';
+    document.getElementById("vOil").innerHTML = d.oil_pressure_bar.toFixed(1) + '<span class="unit">bar</span>';
+    document.getElementById("barPower").style.width = (d.p_gen_mw / 163 * 100) + "%";
+    document.getElementById("barLoad").style.width = d.actual_load_pct + "%";
+    document.getElementById("barExhaust").style.width = (d.exhaust_temp_c / 600 * 100) + "%";
+    document.getElementById("barExhaust").style.background = d.exhaust_temp_c > 500 ? "#ef4444" : "#f59e0b";
+    document.getElementById("barCoolant").style.width = (d.coolant_temp_c / 100 * 100) + "%";
+    document.getElementById("sRpm").textContent = d.rpm.toFixed(0);
+    document.getElementById("sFreq").textContent = d.frequency_hz.toFixed(1);
+    document.getElementById("sVolt").textContent = d.voltage_kv.toFixed(1);
+    document.getElementById("sRuntime").textContent = d.runtime_hours.toFixed(1);
+    const running = d.running;
+    document.getElementById("btnStart").className = running ? "active" : "";
+    document.getElementById("btnStop").className = running ? "" : "stop";
+    document.getElementById("statusDot").className = running ? "dot on" : "dot off";
+  };
+}
+
+function sendCmd(obj) {
+  if (ws && ws.readyState === 1) ws.send(JSON.stringify(obj));
+}
+
+connect();
+</script>
+</body>
+</html>

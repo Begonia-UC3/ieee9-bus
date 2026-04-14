@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>IEEE 9-Bus Grid — Central Engine</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&display=swap');
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:'JetBrains Mono',monospace; background:#0a0e17; color:#e2e8f0; }
+  #header { padding:12px 20px; border-bottom:1px solid #1e293b; display:flex; align-items:center; justify-content:space-between; background:linear-gradient(180deg,#0f1729,#0a0e17); }
+  #header h1 { font-size:15px; letter-spacing:1px; }
+  #header .meta { font-size:11px; color:#64748b; }
+  .dot { width:10px; height:10px; border-radius:50%; display:inline-block; margin-right:8px; }
+  .dot.on { background:#0fa968; box-shadow:0 0 12px #0fa968; animation:pulse 2s infinite; }
+  .dot.off { background:#6b7280; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.5} }
+
+  #namespace-bar { padding:8px 20px; border-bottom:1px solid #1e293b22; display:flex; gap:10px; align-items:center; background:#0c1120; flex-wrap:wrap; font-size:11px; }
+  .ns-badge { padding:4px 10px; background:rgba(255,255,255,.04); border-radius:6px; border:1px solid #0fa96833; display:flex; align-items:center; gap:6px; }
+  .ns-badge .nsdot { width:6px; height:6px; border-radius:50%; background:#0fa968; box-shadow:0 0 6px #0fa968; }
+
+  #main { display:flex; flex-wrap:wrap; }
+  #diagram { flex:1 1 520px; padding:16px; }
+  #diagram svg { width:100%; max-width:540px; display:block; margin:0 auto; }
+  #panel { flex:0 0 300px; border-left:1px solid #1e293b; background:#0c1120; padding:16px; overflow-y:auto; max-height:calc(100vh - 100px); }
+
+  .legend-item { display:flex; align-items:center; gap:8px; margin-bottom:4px; font-size:11px; color:#94a3b8; }
+  .legend-dot { width:10px; height:10px; border-radius:2px; }
+
+  #bus-table { font-size:10px; margin-top:12px; width:100%; }
+  #bus-table th { color:#475569; text-align:left; padding:4px 6px; border-bottom:1px solid #1e293b; }
+  #bus-table td { padding:3px 6px; border-bottom:1px solid #1e293b22; cursor:pointer; }
+  #bus-table tr:hover td { background:#1e293b33; }
+
+  #detail-box { padding:12px; border-radius:8px; margin-bottom:12px; font-size:11px; line-height:1.9; }
+  #detail-box h3 { font-size:13px; margin-bottom:6px; }
+  #detail-box .val { color:#e2e8f0; }
+
+  #footer { padding:10px 20px; border-top:1px solid #1e293b; background:#0c1120; display:flex; gap:12px; align-items:center; justify-content:center; flex-wrap:wrap; font-size:10px; }
+  .flow-tag { padding:2px 8px; border-radius:3px; border:1px solid; }
+</style>
+</head>
+<body>
+<div id="header">
+  <div style="display:flex;align-items:center">
+    <span class="dot on" id="statusDot"></span>
+    <h1>IEEE 9-BUS GRID</h1>
+    <span class="meta" style="margin-left:12px">WSCC POWER FLOW ENGINE</span>
+  </div>
+  <div class="meta">TICK <span id="tickNum">0</span> | <span id="convStatus">—</span></div>
+</div>
+
+<div id="namespace-bar">
+  <span style="color:#475569;letter-spacing:1px;font-size:10px">K8S NAMESPACES</span>
+  <div class="ns-badge"><span class="nsdot"></span> ns-diesel-gen</div>
+  <div class="ns-badge"><span class="nsdot"></span> ns-battery</div>
+  <div class="ns-badge"><span class="nsdot"></span> ns-datacenter</div>
+  <span style="color:#334155;margin-left:auto">→ central-pf-engine</span>
+</div>
+
+<div id="main">
+  <div id="diagram">
+    <svg viewBox="0 0 520 510" id="gridSvg">
+      <defs>
+        <filter id="glow"><feGaussianBlur stdDeviation="3" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+        <filter id="glowStrong"><feGaussianBlur stdDeviation="5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+        <pattern id="bgGrid" width="20" height="20" patternUnits="userSpaceOnUse">
+          <path d="M 20 0 L 0 0 0 20" fill="none" stroke="#1e293b" stroke-width="0.3"/>
+        </pattern>
+      </defs>
+      <rect width="520" height="510" fill="url(#bgGrid)"/>
+      <g id="branchGroup"></g>
+      <g id="busGroup"></g>
+    </svg>
+  </div>
+
+  <div id="panel">
+    <div style="margin-bottom:16px">
+      <div style="font-size:10px;color:#475569;letter-spacing:1px;margin-bottom:8px">STATUS LEGEND</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#0fa968;box-shadow:0 0 6px rgba(15,169,104,.5)"></div> Nominal</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#ef4444;box-shadow:0 0 6px rgba(239,68,68,.6)"></div> Congestion</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#f59e0b;box-shadow:0 0 6px rgba(245,158,11,.5)"></div> Warning</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#3b82f6;box-shadow:0 0 6px rgba(59,130,246,.45)"></div> Idle / No Load</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#a855f7;box-shadow:0 0 6px rgba(168,85,247,.5)"></div> Undervoltage</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#f97316;box-shadow:0 0 6px rgba(249,115,22,.5)"></div> Overvoltage</div>
+    </div>
+    <div id="detailContainer"></div>
+    <div style="font-size:10px;color:#475569;letter-spacing:1px;margin-bottom:6px">ALL BUSES</div>
+    <table id="bus-table">
+      <thead><tr><th>#</th><th>V (pu)</th><th>P net</th><th>Status</th></tr></thead>
+      <tbody id="busTableBody"></tbody>
+    </table>
+  </div>
+</div>
+
+<div id="footer">
+  <span class="flow-tag" style="color:#3b82f6;border-color:#1e3a5f">diesel-gen:8001</span><span style="color:#334155">→</span>
+  <span class="flow-tag" style="color:#3b82f6;border-color:#1e3a5f">battery:8002</span><span style="color:#334155">→</span>
+  <span class="flow-tag" style="color:#3b82f6;border-color:#1e3a5f">datacenter:8003</span><span style="color:#334155">→</span>
+  <span class="flow-tag" style="color:#0fa968;border-color:#0fa96844;font-weight:600">grid-central:8000</span>
+</div>
+
+<script>
+const STATUS_COLORS = {
+  nominal:      {fill:"#0fa968",bg:"rgba(15,169,104,.12)"},
+  congested:    {fill:"#ef4444",bg:"rgba(239,68,68,.15)"},
+  warning:      {fill:"#f59e0b",bg:"rgba(245,158,11,.12)"},
+  idle:         {fill:"#3b82f6",bg:"rgba(59,130,246,.12)"},
+  undervoltage: {fill:"#a855f7",bg:"rgba(168,85,247,.12)"},
+  overvoltage:  {fill:"#f97316",bg:"rgba(249,115,22,.12)"},
+  offline:      {fill:"#6b7280",bg:"rgba(107,114,128,.1)"},
+};
+
+const BUS_POS = {1:{x:260,y:60},2:{x:70,y:440},3:{x:450,y:440},4:{x:260,y:160},5:{x:100,y:240},6:{x:420,y:240},7:{x:70,y:340},8:{x:260,y:340},9:{x:450,y:340}};
+const BRANCHES = [[1,4],[2,7],[3,9],[4,5],[4,6],[5,7],[6,9],[7,8],[8,9]];
+const XFMRS = new Set(["1-4","2-7","3-9"]);
+const GEN_BUSES = new Set([1,2,3]);
+const ASSET_LABELS = {2:"DIESEL",3:"BATT",5:"DC"};
+
+let topology = null;
+let lastState = null;
+
+// ── SVG helpers ──
+function svgEl(tag, attrs) {
+  const el = document.createElementNS("http://www.w3.org/2000/svg", tag);
+  for (const [k,v] of Object.entries(attrs)) el.setAttribute(k,v);
+  return el;
+}
+
+function drawGrid() {
+  const bGroup = document.getElementById("branchGroup");
+  const nGroup = document.getElementById("busGroup");
+  bGroup.innerHTML = "";
+  nGroup.innerHTML = "";
+
+  // Branches
+  for (const [fr,to] of BRANCHES) {
+    const f = BUS_POS[fr], t = BUS_POS[to];
+    const key = `${fr}-${to}`;
+    const isXfmr = XFMRS.has(key);
+    const g = svgEl("g", {id:`br-${key}`, style:"cursor:pointer"});
+    g.appendChild(svgEl("line", {x1:f.x,y1:f.y,x2:t.x,y2:t.y, stroke:"#22c55e", "stroke-width": isXfmr?"2.5":"1.8", "stroke-dasharray": isXfmr?"6,3":"none", opacity:"0.8", id:`br-line-${key}`}));
+    const mx=(f.x+t.x)/2, my=(f.y+t.y)/2;
+    g.appendChild(svgEl("rect", {x:mx-24,y:my-9,width:48,height:18,rx:3,fill:"#0f172a",stroke:"#22c55e","stroke-width":"0.5",opacity:"0.9",id:`br-rect-${key}`}));
+    const txt = svgEl("text", {x:mx,y:my+4,"text-anchor":"middle",fill:"#22c55e","font-size":"9","font-family":"JetBrains Mono,monospace",id:`br-text-${key}`});
+    txt.textContent = "—";
+    g.appendChild(txt);
+    g.onclick = () => showBranchDetail(key);
+    bGroup.appendChild(g);
+  }
+
+  // Buses
+  for (let id = 1; id <= 9; id++) {
+    const p = BUS_POS[id];
+    const isGen = GEN_BUSES.has(id);
+    const g = svgEl("g", {id:`bus-${id}`, style:"cursor:pointer"});
+
+    g.appendChild(svgEl("circle", {cx:p.x,cy:p.y,r:28,fill:"none",stroke:"#0fa968","stroke-width":"1",opacity:"0.25",filter:"url(#glow)",id:`bus-glow-${id}`}));
+    g.appendChild(svgEl("circle", {cx:p.x,cy:p.y,r:22,fill:"#0f172a",stroke:"#0fa968","stroke-width":"2",id:`bus-ring-${id}`}));
+    g.appendChild(svgEl("circle", {cx:p.x,cy:p.y,r:18,fill:"rgba(15,169,104,.12)",id:`bus-fill-${id}`}));
+
+    const numT = svgEl("text", {x:p.x,y:p.y-3,"text-anchor":"middle",fill:"#0fa968","font-size":"12","font-weight":"700","font-family":"JetBrains Mono,monospace",id:`bus-num-${id}`});
+    numT.textContent = id;
+    g.appendChild(numT);
+
+    const lbl = ASSET_LABELS[id] || (isGen ? "GEN" : "XFR");
+    const lblT = svgEl("text", {x:p.x,y:p.y+9,"text-anchor":"middle",fill:"#64748b","font-size":"7","font-family":"JetBrains Mono,monospace"});
+    lblT.textContent = lbl;
+    g.appendChild(lblT);
+
+    // Voltage badge
+    g.appendChild(svgEl("rect", {x:p.x+24,y:p.y-16,width:42,height:14,rx:3,fill:"#0f172aee",stroke:"#0fa968","stroke-width":"0.5",id:`bus-vbox-${id}`}));
+    const vT = svgEl("text", {x:p.x+45,y:p.y-6,"text-anchor":"middle",fill:"#0fa968","font-size":"8","font-family":"JetBrains Mono,monospace",id:`bus-vtxt-${id}`});
+    vT.textContent = "1.000";
+    g.appendChild(vT);
+
+    // Gen symbol
+    if (isGen) {
+      g.appendChild(svgEl("circle", {cx:p.x,cy:p.y-36,r:9,fill:"none",stroke:"#0fa968","stroke-width":"1.5",id:`bus-gen-ring-${id}`}));
+      const gT = svgEl("text", {x:p.x,y:p.y-32,"text-anchor":"middle",fill:"#0fa968","font-size":"9","font-weight":"bold","font-family":"JetBrains Mono,monospace",id:`bus-gen-txt-${id}`});
+      gT.textContent = "G";
+      g.appendChild(gT);
+    }
+
+    g.onclick = () => showBusDetail(id);
+    nGroup.appendChild(g);
+  }
+
+  // Zone labels
+  for (const [text,x,y] of [["ns-diesel-gen (Bus 2)",70,480],["ns-battery (Bus 3)",450,480],["ns-datacenter (Bus 5)",100,215]]) {
+    const t = svgEl("text", {x,y,"text-anchor":"middle",fill:"#334155","font-size":"8","font-family":"JetBrains Mono,monospace","letter-spacing":"1"});
+    t.textContent = text;
+    bGroup.appendChild(t);
+  }
+}
+
+function updateFromState(state) {
+  lastState = state;
+  document.getElementById("tickNum").textContent = state.tick || 0;
+  document.getElementById("convStatus").textContent = state.converged ? `converged in ${state.iterations} iter` : "DIVERGED";
+
+  // Update buses
+  for (const bus of state.buses) {
+    const c = STATUS_COLORS[bus.status] || STATUS_COLORS.nominal;
+    const ring = document.getElementById(`bus-ring-${bus.id}`);
+    const fill = document.getElementById(`bus-fill-${bus.id}`);
+    const glow = document.getElementById(`bus-glow-${bus.id}`);
+    const numT = document.getElementById(`bus-num-${bus.id}`);
+    const vbox = document.getElementById(`bus-vbox-${bus.id}`);
+    const vtxt = document.getElementById(`bus-vtxt-${bus.id}`);
+    if (ring) ring.setAttribute("stroke", c.fill);
+    if (fill) fill.setAttribute("fill", c.bg);
+    if (glow) glow.setAttribute("stroke", c.fill);
+    if (numT) numT.setAttribute("fill", c.fill);
+    if (vbox) vbox.setAttribute("stroke", c.fill);
+    if (vtxt) { vtxt.setAttribute("fill", c.fill); vtxt.textContent = bus.v_pu.toFixed(3); }
+    // Gen ring
+    const gr = document.getElementById(`bus-gen-ring-${bus.id}`);
+    const gt = document.getElementById(`bus-gen-txt-${bus.id}`);
+    if (gr) gr.setAttribute("stroke", c.fill);
+    if (gt) gt.setAttribute("fill", c.fill);
+  }
+
+  // Update branches
+  for (const br of state.branches) {
+    const key = `${br.from}-${br.to}`;
+    const c = STATUS_COLORS[br.status] || STATUS_COLORS.nominal;
+    const line = document.getElementById(`br-line-${key}`);
+    const rect = document.getElementById(`br-rect-${key}`);
+    const txt = document.getElementById(`br-text-${key}`);
+    const sw = br.loading_pct > 50 ? Math.max(2, br.loading_pct / 25) : 1.8;
+    if (line) { line.setAttribute("stroke", c.fill); line.setAttribute("stroke-width", sw); line.setAttribute("filter", br.loading_pct > 70 ? "url(#glow)" : ""); }
+    if (rect) rect.setAttribute("stroke", c.fill);
+    if (txt) { txt.setAttribute("fill", c.fill); txt.textContent = `${br.p_flow_mw}MW`; }
+  }
+
+  // Update table
+  const tbody = document.getElementById("busTableBody");
+  tbody.innerHTML = "";
+  for (const bus of state.buses) {
+    const c = STATUS_COLORS[bus.status] || STATUS_COLORS.nominal;
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td style="color:${c.fill};font-weight:600">${bus.id}</td><td>${bus.v_pu.toFixed(3)}</td><td>${(bus.p_gen_mw - bus.p_load_mw).toFixed(0)}</td><td style="color:${c.fill}">${bus.status}</td>`;
+    tr.onclick = () => showBusDetail(bus.id);
+    tbody.appendChild(tr);
+  }
+}
+
+function showBusDetail(id) {
+  if (!lastState) return;
+  const bus = lastState.buses.find(b => b.id === id);
+  if (!bus) return;
+  const c = STATUS_COLORS[bus.status] || STATUS_COLORS.nominal;
+  const asset = lastState.asset_overrides || {};
+  const assetName = {2:"diesel-gen",3:"battery",5:"datacenter"}[id];
+  const assetInfo = assetName && asset[assetName] ? `<div>Asset: <span class="val">${assetName}</span></div>` : "";
+  document.getElementById("detailContainer").innerHTML = `
+    <div id="detail-box" style="background:${c.bg};border:1px solid ${c.fill}44">
+      <h3 style="color:${c.fill}">Bus ${id} — ${bus.type.toUpperCase()}</h3>
+      <div>Voltage: <span class="val">${bus.v_pu} pu</span></div>
+      <div>Angle: <span class="val">${bus.angle_deg}°</span></div>
+      <div>P Gen: <span class="val">${bus.p_gen_mw} MW</span></div>
+      <div>P Load: <span class="val">${bus.p_load_mw} MW</span></div>
+      <div>Status: <span style="color:${c.fill};font-weight:600">${bus.status.toUpperCase()}</span></div>
+      ${assetInfo}
+    </div>`;
+}
+
+function showBranchDetail(key) {
+  if (!lastState) return;
+  const [fr,to] = key.split("-").map(Number);
+  const br = lastState.branches.find(b => b.from===fr && b.to===to);
+  if (!br) return;
+  const c = STATUS_COLORS[br.status] || STATUS_COLORS.nominal;
+  document.getElementById("detailContainer").innerHTML = `
+    <div id="detail-box" style="background:${c.bg};border:1px solid ${c.fill}44">
+      <h3 style="color:${c.fill}">Line ${key} — ${br.type.toUpperCase()}</h3>
+      <div>P Flow: <span class="val">${br.p_flow_mw} MW</span></div>
+      <div>Loading: <span class="val">${br.loading_pct}%</span></div>
+      <div>Rate: <span class="val">${br.rate_mva} MVA</span></div>
+      <div>Status: <span style="color:${c.fill};font-weight:600">${br.status.toUpperCase()}</span></div>
+      <div style="margin-top:8px;height:6px;background:#1e293b;border-radius:3px;overflow:hidden">
+        <div style="width:${Math.min(100,br.loading_pct)}%;height:100%;background:${c.fill};border-radius:3px;transition:width .5s"></div>
+      </div>
+    </div>`;
+}
+
+// ── WebSocket ──
+function connectWS() {
+  const wsProto = location.protocol === "https:" ? "wss:" : "ws:";
+  const ws = new WebSocket(`${wsProto}//${location.host}/ws/grid`);
+  ws.onopen = () => { document.getElementById("statusDot").className = "dot on"; };
+  ws.onclose = () => { document.getElementById("statusDot").className = "dot off"; setTimeout(connectWS, 2000); };
+  ws.onmessage = (e) => { try { updateFromState(JSON.parse(e.data)); } catch(err) { console.error(err); } };
+}
+
+drawGrid();
+connectWS();
+</script>
+</body>
+</html>

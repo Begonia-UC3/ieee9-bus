@@ -5,9 +5,22 @@ metadata:
   name: {{ .Release.Name }}
   labels:
     {{- include "ieee9-grid.labels" (dict "ctx" . "component" "grid-central") | nindent 4 }}
+  {{- if .Values.tlsEnabled }}
+  annotations:
+    cert-manager.io/cluster-issuer: {{ .Values.tlsClusterIssuer | quote }}
+    {{- with .Values.ingressClassName }}
+    acme.cert-manager.io/http01-ingress-class: {{ . | quote }}
+    {{- end }}
+  {{- end }}
 spec:
   {{- with .Values.ingressClassName }}
   ingressClassName: {{ . }}
+  {{- end }}
+  {{- if .Values.tlsEnabled }}
+  tls:
+    - hosts:
+        - {{ .Values.ingressHost | quote }}
+      secretName: {{ .Release.Name }}-tls
   {{- end }}
   rules:
     - host: {{ .Values.ingressHost | quote }}

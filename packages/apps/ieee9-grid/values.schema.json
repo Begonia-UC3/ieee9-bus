@@ -27,6 +27,16 @@
       "description": "Optional IngressClass name.",
       "type": "string",
       "default": ""
+    },
+    "tlsEnabled": {
+      "description": "Issue an LE certificate via cert-manager when ingress is enabled.",
+      "type": "boolean",
+      "default": true
+    },
+    "tlsClusterIssuer": {
+      "description": "cert-manager ClusterIssuer used for the certificate.",
+      "type": "string",
+      "default": "letsencrypt-prod"
     }
   },
   "allOf": [

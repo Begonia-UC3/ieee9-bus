@@ -18,3 +18,9 @@ ingressHost: "ieee9.example.com"
 
 ## @param {string} ingressClassName="" - Optional IngressClass name.
 ingressClassName: ""
+
+## @param {boolean} tlsEnabled=true - Issue an LE certificate via cert-manager when ingress is enabled.
+tlsEnabled: true
+
+## @param {string} tlsClusterIssuer="letsencrypt-prod" - cert-manager ClusterIssuer used for the certificate.
+tlsClusterIssuer: "letsencrypt-prod"

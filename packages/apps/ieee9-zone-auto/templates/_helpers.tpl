@@ -22,7 +22,7 @@ release, so two concurrent click-deploys don't collide.
 {{- define "ieee9ZoneAuto.instanceNumber" -}}
 {{- $pool := list 2 3 4 -}}
 {{- $taken := list -}}
-{{- $self := printf "%s/%s" .Release.Namespace .Release.Name -}}
+{{- $self := printf "%s_%s" .Release.Namespace .Release.Name -}}
 {{- $tList := (lookup "apps.cozystack.io/v1alpha1" "Tenant" "" "") -}}
 {{- if $tList -}}
   {{- range $t := $tList.items -}}
@@ -112,11 +112,12 @@ Ingress host, with the slot number substituted into ingressHostTemplate.
 {{- end }}
 
 {{/*
-Release-identifying owner label: "<ns>/<name>". Used so allocation is stable
-across re-renders for the same release.
+Release-identifying owner label: "<ns>_<name>". Used so allocation is stable
+across re-renders for the same release. Uses `_` (not `/`) because this
+value is used as a Kubernetes label VALUE, which forbids slashes.
 */}}
 {{- define "ieee9ZoneAuto.owner" -}}
-{{- printf "%s/%s" .Release.Namespace .Release.Name -}}
+{{- printf "%s_%s" .Release.Namespace .Release.Name -}}
 {{- end }}
 
 {{/*

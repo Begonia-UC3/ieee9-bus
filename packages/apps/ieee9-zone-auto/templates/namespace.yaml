@@ -1,5 +1,11 @@
 {{- include "ieee9ZoneAuto.validate" . -}}
 {{- $ns := include "ieee9ZoneAuto.namespace" . -}}
+# Namespace is a pre-install hook with an early weight so it exists
+# before the bootstrap Job (weight -5) needs to run inside it. We
+# deliberately don't use hook-delete-policy here — once created, the
+# namespace must outlive the hook phase so the regular chart resources
+# (Deployment, Service, Ingress) can land in it. The post-delete Job
+# cleans it up on release uninstall.
 apiVersion: v1
 kind: Namespace
 metadata:
@@ -7,3 +13,7 @@ metadata:
   labels:
     ieee9-zone-auto/owner: {{ include "ieee9ZoneAuto.owner" . | quote }}
     {{- include "ieee9ZoneAuto.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": pre-install
+    "helm.sh/hook-weight": "-20"
+    "helm.sh/resource-policy": keep

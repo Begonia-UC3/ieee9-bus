@@ -9,6 +9,10 @@ metadata:
   namespace: {{ $ns }}
   labels:
     {{- include "ieee9ZoneAuto.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-15"
+    "helm.sh/hook-delete-policy": before-hook-creation
 ---
 # Cluster-scoped role: read the PAT Secret in its source namespace.
 apiVersion: rbac.authorization.k8s.io/v1
@@ -17,6 +21,10 @@ metadata:
   name: {{ .Release.Name }}-dso-bootstrap-read
   labels:
     {{- include "ieee9ZoneAuto.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-15"
+    "helm.sh/hook-delete-policy": before-hook-creation
 rules:
   - apiGroups: [""]
     resources: ["secrets"]
@@ -29,6 +37,10 @@ metadata:
   name: {{ .Release.Name }}-dso-bootstrap-read
   labels:
     {{- include "ieee9ZoneAuto.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-15"
+    "helm.sh/hook-delete-policy": before-hook-creation
 subjects:
   - kind: ServiceAccount
     name: dso-bootstrap
@@ -46,6 +58,10 @@ metadata:
   namespace: {{ $ns }}
   labels:
     {{- include "ieee9ZoneAuto.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-15"
+    "helm.sh/hook-delete-policy": before-hook-creation
 rules:
   - apiGroups: [""]
     resources: ["secrets"]
@@ -58,6 +74,10 @@ metadata:
   namespace: {{ $ns }}
   labels:
     {{- include "ieee9ZoneAuto.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-15"
+    "helm.sh/hook-delete-policy": before-hook-creation
 subjects:
   - kind: ServiceAccount
     name: dso-bootstrap

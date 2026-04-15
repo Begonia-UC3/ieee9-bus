@@ -23,6 +23,9 @@ spec:
     metadata:
       labels:
         {{- include "ieee9ZoneAuto.selectorLabels" . | nindent 8 }}
+        # Opt in to the parent tenant's allow-to-apiserver CiliumNetworkPolicy.
+        # Without this label the pod can't reach 10.96.0.1 and kubectl hangs.
+        policy.cozystack.io/allow-to-apiserver: "true"
     spec:
       serviceAccountName: {{ .Release.Name }}-bootstrap
       restartPolicy: Never

@@ -63,14 +63,13 @@ Asset id reported upstream: "dso-N".
 {{- end }}
 
 {{/*
-Target namespace for the deployed DSO: tenant-dsoN (provisioned by
-Cozystack from the Tenant CR). Name contains no dashes after the
-"tenant-" prefix — Cozystack's Tenant chart rejects multi-dash
-release names.
+Target namespace for the deployed DSO. Cozystack names child-tenant
+namespaces as `<parent-namespace>-<child-tenant-name>`, so with parent
+tenant `dsos` (namespace `tenant-dsos`) and child tenant `dsoN` the
+namespace is `tenant-dsos-dsoN`.
 */}}
 {{- define "ieee9ZoneAuto.namespace" -}}
-{{- $n := include "ieee9ZoneAuto.instanceNumber" . -}}
-{{- printf "tenant-dso%s" $n -}}
+{{- printf "%s-%s" (include "ieee9ZoneAuto.parentNamespace" .) (include "ieee9ZoneAuto.tenantName" .) -}}
 {{- end }}
 
 {{/*

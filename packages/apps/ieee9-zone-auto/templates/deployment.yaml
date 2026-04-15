@@ -1,0 +1,216 @@
+{{- $ns := include "ieee9ZoneAuto.namespace" . -}}
+{{- $n := include "ieee9ZoneAuto.instanceNumber" . -}}
+{{- $bus := include "ieee9ZoneAuto.outerBus" . -}}
+{{- $assetId := include "ieee9ZoneAuto.assetId" . -}}
+{{- $repoName := include "ieee9ZoneAuto.repoName" . -}}
+{{- $tag := include "ieee9ZoneAuto.imageTag" . -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dso
+  namespace: {{ $ns }}
+  labels:
+    {{- include "ieee9ZoneAuto.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      {{- include "ieee9ZoneAuto.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "ieee9ZoneAuto.selectorLabels" . | nindent 8 }}
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+        - name: init-repo
+          image: alpine/git:2.43.0
+          env:
+            - name: GH_USER
+              valueFrom:
+                secretKeyRef:
+                  name: github-pat
+                  key: username
+            - name: GH_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: github-pat
+                  key: token
+            - name: REPO_OWNER
+              value: {{ .Values.modelRepoOwner | quote }}
+            - name: REPO_NAME
+              value: {{ $repoName | quote }}
+            - name: SLOT
+              value: {{ $n | quote }}
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -eu
+              apk add --no-cache curl jq >/dev/null
+              cd /tmp
+              URL_API="https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}"
+              echo "Checking GitHub for ${REPO_OWNER}/${REPO_NAME}..."
+              code=$(curl -sS -o /tmp/resp.json -w "%{http_code}" \
+                -H "Authorization: token ${GH_TOKEN}" \
+                -H "Accept: application/vnd.github+json" \
+                "${URL_API}")
+              if [ "${code}" = "404" ]; then
+                echo "Not found — creating public repo..."
+                curl -sS -H "Authorization: token ${GH_TOKEN}" \
+                  -H "Accept: application/vnd.github+json" \
+                  -d "{\"name\":\"${REPO_NAME}\",\"auto_init\":true,\"private\":false,\"description\":\"Auto-provisioned DSO model for ieee9-bus slot ${SLOT}.\"}" \
+                  https://api.github.com/user/repos > /tmp/create.json
+                echo "Created. Waiting briefly for GitHub to settle..."
+                sleep 2
+              elif [ "${code}" = "200" ]; then
+                echo "Repo exists."
+              else
+                echo "Unexpected GitHub response ${code}:"
+                cat /tmp/resp.json
+                exit 1
+              fi
+
+              git config --global user.email "ieee9-zone-auto@example.invalid"
+              git config --global user.name  "ieee9-zone-auto"
+              git clone --depth 1 \
+                "https://${GH_USER}:${GH_TOKEN}@github.com/${REPO_OWNER}/${REPO_NAME}.git" \
+                /tmp/work
+              cd /tmp/work
+              if [ ! -f model.json ]; then
+                echo "Seeding model.json from packaged template for slot ${SLOT}..."
+                cp /templates/model-dso-${SLOT}.json model.json
+                git add model.json
+                git commit -m "seed: default 60 kV distribution feeder for slot ${SLOT}"
+                git push origin HEAD
+              else
+                echo "model.json already present — leaving as-is."
+              fi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            runAsNonRoot: false
+            capabilities:
+              drop: [ALL]
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+          volumeMounts:
+            - name: model-templates
+              mountPath: /templates
+              readOnly: true
+      containers:
+        - name: dso
+          image: "ghcr.io/begonia-uc3/ieee9-bus/dso:{{ $tag }}"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8000
+              protocol: TCP
+          env:
+            - name: PYTHONUNBUFFERED
+              value: "1"
+            - name: GRID_CENTRAL_URL
+              value: {{ .Values.gridCentralUrl | quote }}
+            - name: TICK_INTERVAL
+              value: {{ .Values.tickInterval | quote }}
+            - name: MODEL_PATH
+              value: "/model/current/model.json"
+            - name: ASSET_ID
+              value: {{ $assetId | quote }}
+            - name: UPSTREAM_BUS_ID
+              value: {{ $bus | quote }}
+            - name: UPSTREAM_POLL_SECONDS
+              value: {{ .Values.upstreamPollSeconds | quote }}
+          readinessProbe:
+            httpGet:
+              path: /api/status
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /api/status
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 30
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          resources:
+            requests:
+              cpu: 200m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: model
+              mountPath: /model
+              readOnly: true
+        - name: git-sync
+          image: "registry.k8s.io/git-sync/git-sync:v4.3.0"
+          imagePullPolicy: IfNotPresent
+          args:
+            - "--repo=https://github.com/{{ .Values.modelRepoOwner }}/{{ $repoName }}.git"
+            - "--ref=main"
+            - "--period={{ .Values.modelSyncIntervalSeconds }}s"
+            - "--root=/model"
+            - "--link=current"
+            - "--verbose=2"
+          env:
+            - name: GITSYNC_ROOT
+              value: /model
+            - name: GITSYNC_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: github-pat
+                  key: username
+            - name: GITSYNC_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: github-pat
+                  key: token
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsUser: 65534
+            runAsGroup: 65534
+            capabilities:
+              drop: [ALL]
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+          volumeMounts:
+            - name: model
+              mountPath: /model
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        - name: model
+          emptyDir: {}
+        - name: model-templates
+          configMap:
+            name: model-templates

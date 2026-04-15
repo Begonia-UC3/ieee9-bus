@@ -2,7 +2,7 @@ name: Lint charts
 
 on:
   push:
-    branches: [main]
+    branches: [main, dso, dso-auto]
     paths:
       - 'packages/**'
       - 'init.yaml'
@@ -37,6 +37,12 @@ jobs:
       - name: Lint packages/apps/ieee9-grid
         run: helm lint packages/apps/ieee9-grid
 
+      - name: Lint packages/apps/ieee9-zone
+        run: helm lint packages/apps/ieee9-zone
+
+      - name: Lint packages/apps/ieee9-zone-auto
+        run: helm lint packages/apps/ieee9-zone-auto
+
       - name: Lint packages/core/platform
         run: helm lint packages/core/platform
 
@@ -48,6 +54,24 @@ jobs:
           helm template test packages/apps/ieee9-grid \
             --set ingressEnabled=true \
             --set ingressHost=ieee9.example.com \
+            > /dev/null
+
+      - name: Template packages/apps/ieee9-zone (diesel)
+        run: |
+          helm template test packages/apps/ieee9-zone \
+            --set mode=diesel > /dev/null
+
+      - name: Template packages/apps/ieee9-zone (dso)
+        run: |
+          helm template test packages/apps/ieee9-zone \
+            --set mode=dso \
+            --set modelRepoUrl=https://github.com/example/model.git \
+            > /dev/null
+
+      - name: Template packages/apps/ieee9-zone-auto
+        run: |
+          helm template test packages/apps/ieee9-zone-auto \
+            --set modelRepoOwner=exampleuser \
             > /dev/null
 
       - name: Template packages/core/platform

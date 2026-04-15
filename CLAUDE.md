@@ -203,6 +203,80 @@ for `mode: dso`) so cross-asset DNS stays predictable. Two
 collide on the workload name — by design, one zone of each mode per
 tenant.
 
+### Third button: `Ieee9ZoneAuto` (auto-provisioned DSOs)
+
+In addition to the two manual buttons above, the marketplace exposes
+**`Ieee9ZoneAuto`** (prefix `zone-auto-`, chart `ieee9-zone-auto`).
+Clicking it submits the shortest possible CR and the chart fans out
+the rest:
+
+- **Slot allocation.** At render time, `templates/_helpers.tpl`
+  scans cluster Namespaces for label `ieee9-zone-auto/index` and
+  picks the lowest free slot from the pool `{2, 3, 4}`. Slot → outer
+  TSO bus is fixed: `2→9, 3→7, 4→4`. The 4th click fails with a
+  clear "no free slot" message (IEEE-9 has only three unclaimed PQ
+  transmission buses). Allocation is stable across reconciliations
+  because the namespace carries an `ieee9-zone-auto/owner` label
+  pinning the slot to this release.
+- **Namespace.** Chart creates `tenant-dso-<N>` and deploys all
+  workloads there (cross-namespace from the HelmRelease's own
+  namespace — Flux helmController runs as cluster-admin).
+- **PAT Secret copy.** A pre-install Job (ServiceAccount
+  `dso-bootstrap` with a ClusterRole for reading the source Secret)
+  copies `cozy-system/ieee9-dso-github-pat` into
+  `tenant-dso-<N>/github-pat`. Create this source Secret once per
+  cluster — the PAT needs scope `repo`.
+- **Repo auto-create.** An init container on the DSO pod
+  (`alpine/git` + `curl`) `GET`s the GitHub API for
+  `<owner>/dso-<N>-model`; if 404, POSTs to `/user/repos` to create
+  a public repo, then clones it and seeds `model.json` from a
+  packaged 60 kV feeder template (`files/model-dso-<N>.json`,
+  rendered into a ConfigMap `model-templates` mounted at
+  `/templates`).
+- **Runtime.** Standard dso container + git-sync sidecar. Asset id
+  reported upstream is `dso-<N>` — already in `ASSET_BUS_MAP`.
+  `gridCentralUrl` defaults to the FQDN
+  `http://grid-central.tenant-root.svc.cluster.local:8000`.
+- **Teardown.** A post-delete Job (with a throwaway
+  ClusterRoleBinding to `cluster-admin` in the release's own
+  namespace) deletes `tenant-dso-<N>` and the cluster-scoped RBAC
+  from the pre-install flow. The GitHub repo is **not** auto-deleted
+  — that's intentional (no chart should be trusted with
+  `delete_repo` scope). Delete it manually with
+  `gh repo delete <owner>/dso-<N>-model --yes`.
+
+Click-deploy payload is exactly:
+
+```yaml
+apiVersion: apps.cozystack.io/v1alpha1
+kind: Ieee9ZoneAuto
+metadata:
+  name: my-dso          # any free name; chart picks the slot
+  namespace: tenant-root
+spec:
+  modelRepoOwner: <your-github-username>
+```
+
+One-time cluster prereq (create this once, reuse for every auto-DSO):
+
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: ieee9-dso-github-pat
+  namespace: cozy-system
+type: Opaque
+stringData:
+  username: <your-github-username>
+  token: ghp_<classic PAT with repo scope>
+```
+
+The outer-bus mapping lives in two places that must stay in sync:
+`grid-central/main.py` `ASSET_BUS_MAP` (includes `dso-2/3/4` → bus
+`9/7/4`) and `packages/apps/ieee9-zone-auto/values.yaml`
+`_busForSlot`. Extending the pool = editing both + bumping the
+allocator's `$pool` list in `_helpers.tpl`.
+
 ### DSO mode specifics
 
 When `spec.mode: dso`, the chart injects a **git-sync** sidecar
@@ -374,8 +448,18 @@ dashboard.
 - **DSO `external_tie.asset_id` must match `ASSET_BUS_MAP`.** DSO
   reports as that asset_id to `grid-central`; if the id isn't in
   `ASSET_BUS_MAP`, the injection is silently ignored. Current valid
-  values: `diesel-gen`, `battery`, `datacenter`, `dso`. The conventional
-  default for the nested-grid concept is `"dso"` → bus 6.
+  values: `diesel-gen`, `battery`, `datacenter`, `dso`, and the
+  auto-slot ids `dso-2`/`dso-3`/`dso-4` (→ buses 9/7/4, used by the
+  `Ieee9ZoneAuto` button). The conventional default for the
+  nested-grid concept is `"dso"` → bus 6.
+- **Slack (bus 1) generation is back-computed after NR.** Earlier
+  versions rendered the slack as permanently "offline" because the
+  dashboard read the static input `P_gen[0] = 0`. Post the `dso-auto`
+  branch, `grid-central/main.py` populates `self.P_gen[0]` and
+  `self.Q_gen[0]` from `S_inj = V_1 · conj(Σ Y_1k · V_k)` after the
+  NR loop converges, so `bus_results[0]` reflects the real slack
+  injection. Two-plus-DSO deployments rely on this to visualise net
+  power flowing upstream of the TSO ring.
 
 ## Operational gotchas
 

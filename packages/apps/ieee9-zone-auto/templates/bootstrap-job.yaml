@@ -1,0 +1,52 @@
+{{- $ns := include "ieee9ZoneAuto.namespace" . -}}
+# Pre-install Job that copies the PAT Secret from the source namespace
+# (cozy-system by default) into the freshly-created per-instance namespace,
+# so the DSO pod's init-container and git-sync sidecar can mount it locally.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: copy-pat-secret
+  namespace: {{ $ns }}
+  labels:
+    {{- include "ieee9ZoneAuto.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-5"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 2
+  ttlSecondsAfterFinished: 300
+  template:
+    metadata:
+      labels:
+        {{- include "ieee9ZoneAuto.selectorLabels" . | nindent 8 }}
+    spec:
+      serviceAccountName: dso-bootstrap
+      restartPolicy: Never
+      containers:
+        - name: copy
+          image: bitnami/kubectl:1.30
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -euo pipefail
+              echo "Copying Secret {{ .Values.patSecretNamespace }}/{{ .Values.patSecretName }} → {{ $ns }}/github-pat"
+              kubectl get secret {{ .Values.patSecretName }} \
+                -n {{ .Values.patSecretNamespace }} -o json \
+                | jq 'del(.metadata.namespace,.metadata.resourceVersion,.metadata.uid,.metadata.creationTimestamp,.metadata.ownerReferences,.metadata.managedFields) | .metadata.name="github-pat"' \
+                | kubectl apply -n {{ $ns }} -f -
+              echo "done"
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 1001
+            capabilities:
+              drop: [ALL]
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi

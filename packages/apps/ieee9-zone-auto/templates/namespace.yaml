@@ -1,0 +1,9 @@
+{{- include "ieee9ZoneAuto.validate" . -}}
+{{- $ns := include "ieee9ZoneAuto.namespace" . -}}
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ $ns }}
+  labels:
+    ieee9-zone-auto/owner: {{ include "ieee9ZoneAuto.owner" . | quote }}
+    {{- include "ieee9ZoneAuto.labels" . | nindent 4 }}

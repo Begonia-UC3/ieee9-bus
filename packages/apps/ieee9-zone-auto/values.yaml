@@ -1,0 +1,54 @@
+## @section Repo provisioning
+
+## @param {string} modelRepoOwner="" - GitHub username that will own the auto-created model repo (e.g. your personal account). Required.
+modelRepoOwner: ""
+
+## @param {string} patSecretName="ieee9-dso-github-pat" - Name of a Secret in cozy-system holding keys `username` and `token` (PAT with `repo` scope). Created once, reused by every auto-DSO.
+patSecretName: "ieee9-dso-github-pat"
+
+## @param {string} patSecretNamespace="cozy-system" - Namespace of the PAT Secret source.
+patSecretNamespace: "cozy-system"
+
+## @section Wiring
+
+## @param {string} gridCentralUrl="http://grid-central.tenant-root.svc.cluster.local:8000" - FQDN of grid-central. Cross-namespace by default since this chart lives outside tenant-root.
+gridCentralUrl: "http://grid-central.tenant-root.svc.cluster.local:8000"
+
+## @param {int} modelSyncIntervalSeconds=30 - Poll interval for git-sync.
+modelSyncIntervalSeconds: 30
+
+## @param {int} upstreamPollSeconds=5 - Interval for polling upstream grid-central state for the closed-loop V feedback.
+upstreamPollSeconds: 5
+
+## @param {string} tickInterval="1.0" - Seconds between internal DSO solve ticks.
+tickInterval: "1.0"
+
+## @section Image
+
+## @param {string} imageTag="" - Override image tag. Defaults to chart appVersion.
+imageTag: ""
+
+## @section Ingress
+
+## @param {boolean} ingressEnabled=true - Expose the auto-DSO UI via Ingress.
+ingressEnabled: true
+
+## @param {string} ingressHostTemplate="dso-%d.cozystack-demo.org" - Printf-style template; %d is replaced with the allocated instance number.
+ingressHostTemplate: "dso-%d.cozystack-demo.org"
+
+## @param {string} ingressClassName="tenant-root" - IngressClass to use.
+ingressClassName: "tenant-root"
+
+## @param {boolean} tlsEnabled=true - Issue a LE cert via cert-manager.
+tlsEnabled: true
+
+## @param {string} tlsClusterIssuer="letsencrypt-prod" - cert-manager ClusterIssuer.
+tlsClusterIssuer: "letsencrypt-prod"
+
+## @section Internal (do not set manually)
+
+## @param {object} _busForSlot={} - Static pool→bus mapping. Do not edit.
+_busForSlot:
+  "2": 9
+  "3": 7
+  "4": 4

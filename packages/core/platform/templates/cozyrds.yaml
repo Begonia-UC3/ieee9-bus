@@ -122,3 +122,64 @@ spec:
         - tlsEnabled
       - - spec
         - tlsClusterIssuer
+---
+apiVersion: cozystack.io/v1alpha1
+kind: ApplicationDefinition
+metadata:
+  name: ieee9-zone-auto
+spec:
+  application:
+    kind: Ieee9ZoneAuto
+    plural: ieee9zoneautos
+    singular: ieee9-zone-auto
+    openAPISchema: '{"title":"IEEE 9-Bus Zone Auto","description":"Fully-automated DSO. Allocates its own slot (2/3/4), creates its own namespace and a public model repo on your GitHub account.","type":"object","required":["modelRepoOwner"],"properties":{"modelRepoOwner":{"description":"GitHub username that will own the auto-created model repo.","type":"string","minLength":1},"patSecretName":{"description":"Name of a Secret in cozy-system with keys username + token (PAT).","type":"string","default":"ieee9-dso-github-pat"},"patSecretNamespace":{"description":"Namespace of the PAT Secret source.","type":"string","default":"cozy-system"},"gridCentralUrl":{"description":"FQDN of upstream grid-central.","type":"string","default":"http://grid-central.tenant-root.svc.cluster.local:8000"},"modelSyncIntervalSeconds":{"type":"integer","minimum":5,"default":30},"upstreamPollSeconds":{"type":"integer","minimum":1,"default":5},"tickInterval":{"type":"string","default":"1.0"},"imageTag":{"type":"string","default":""},"ingressEnabled":{"type":"boolean","default":true},"ingressHostTemplate":{"description":"Printf template; %d is replaced with the allocated slot number.","type":"string","default":"dso-%d.cozystack-demo.org"},"ingressClassName":{"type":"string","default":"tenant-root"},"tlsEnabled":{"type":"boolean","default":true},"tlsClusterIssuer":{"type":"string","default":"letsencrypt-prod"}}}'
+  release:
+    chartRef:
+      kind: HelmChart
+      name: ieee9-bus-ieee9-zone-auto
+      namespace: cozy-public
+    labels:
+      cozystack.io/ui: "true"
+    prefix: zone-auto-
+  dashboard:
+    category: Simulation
+    singular: IEEE 9-Bus Zone Auto
+    plural: IEEE 9-Bus Zone Autos
+    description: Auto-provisioned DSO. One click allocates a slot (2/3/4 → TSO buses 9/7/4), creates tenant-dso-N namespace, auto-creates a public model repo on your GitHub account, and wires everything to grid-central. Requires a PAT Secret `ieee9-dso-github-pat` in cozy-system.
+    tags:
+      - simulation
+      - power-grid
+      - ieee9
+      - dso
+    keysOrder:
+      - - apiVersion
+      - - kind
+      - - metadata
+      - - metadata
+        - name
+      - - spec
+        - modelRepoOwner
+      - - spec
+        - patSecretName
+      - - spec
+        - patSecretNamespace
+      - - spec
+        - gridCentralUrl
+      - - spec
+        - modelSyncIntervalSeconds
+      - - spec
+        - upstreamPollSeconds
+      - - spec
+        - tickInterval
+      - - spec
+        - imageTag
+      - - spec
+        - ingressEnabled
+      - - spec
+        - ingressHostTemplate
+      - - spec
+        - ingressClassName
+      - - spec
+        - tlsEnabled
+      - - spec
+        - tlsClusterIssuer

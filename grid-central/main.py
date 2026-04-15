@@ -56,6 +56,9 @@ ASSET_BUS_MAP = {
     "battery":     3,   # Generator/load on Bus 3
     "datacenter":  5,   # Load on Bus 5
     "dso":         6,   # DSO aggregator on Bus 6 (replaces the anonymous 90 MW load)
+    "dso-2":       9,   # auto-DSO slot 1 (ieee9-zone-auto chart)
+    "dso-3":       7,   # auto-DSO slot 2
+    "dso-4":       4,   # auto-DSO slot 3
 }
 
 S_BASE = 100.0  # MVA base
@@ -245,6 +248,18 @@ class PowerFlowEngine:
 
         self.V = V
         self.theta = theta
+
+        # Back-compute slack bus injection from the solved state so the
+        # dashboard shows the true slack generation (P,Q) instead of the
+        # static input P_gen[0]=0. Without this the slack always reads
+        # "offline" in the UI.
+        V_c = np.array([V[k] * complex(math.cos(theta[k]), math.sin(theta[k]))
+                        for k in range(self.n)])
+        for i, btype in enumerate(self.bus_types):
+            if btype == "slack":
+                S_inj_pu = V_c[i] * np.conj(self.Y[i, :] @ V_c)
+                self.P_gen[i] = S_inj_pu.real + self.P_load[i]
+                self.Q_gen[i] = S_inj_pu.imag + self.Q_load[i]
 
         # Compute final line flows
         branch_results = []

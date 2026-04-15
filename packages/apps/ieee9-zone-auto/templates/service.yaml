@@ -1,0 +1,17 @@
+{{- $ns := include "ieee9ZoneAuto.namespace" . -}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: dso
+  namespace: {{ $ns }}
+  labels:
+    {{- include "ieee9ZoneAuto.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "ieee9ZoneAuto.selectorLabels" . | nindent 4 }}
+  ports:
+    - name: http
+      port: 8000
+      targetPort: http
+      protocol: TCP

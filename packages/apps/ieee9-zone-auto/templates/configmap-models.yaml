@@ -1,0 +1,15 @@
+{{- $ns := include "ieee9ZoneAuto.namespace" . -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: model-templates
+  namespace: {{ $ns }}
+  labels:
+    {{- include "ieee9ZoneAuto.labels" . | nindent 4 }}
+data:
+  model-dso-2.json: |
+{{ .Files.Get "files/model-dso-2.json" | indent 4 }}
+  model-dso-3.json: |
+{{ .Files.Get "files/model-dso-3.json" | indent 4 }}
+  model-dso-4.json: |
+{{ .Files.Get "files/model-dso-4.json" | indent 4 }}

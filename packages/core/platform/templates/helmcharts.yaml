@@ -24,3 +24,16 @@ spec:
     kind: GitRepository
     name: ieee9-bus
   reconcileStrategy: Revision
+---
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: HelmChart
+metadata:
+  name: ieee9-bus-ieee9-zone-auto
+  namespace: cozy-public
+spec:
+  interval: 5m
+  chart: ./packages/apps/ieee9-zone-auto
+  sourceRef:
+    kind: GitRepository
+    name: ieee9-bus
+  reconcileStrategy: Revision

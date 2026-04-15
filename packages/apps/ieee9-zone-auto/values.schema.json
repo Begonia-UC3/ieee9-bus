@@ -1,0 +1,66 @@
+{
+  "title": "IEEE 9-Bus Zone Auto",
+  "description": "Fully-automated DSO instance. Allocates its own slot (2/3/4), namespace, and GitHub model repo on the owner's account.",
+  "type": "object",
+  "required": ["modelRepoOwner"],
+  "properties": {
+    "modelRepoOwner": {
+      "description": "GitHub username that will own the auto-created model repo (e.g. your personal account).",
+      "type": "string"
+    },
+    "patSecretName": {
+      "description": "Name of a Secret in cozy-system holding username + PAT.",
+      "type": "string",
+      "default": "ieee9-dso-github-pat"
+    },
+    "patSecretNamespace": {
+      "description": "Namespace of the PAT Secret source.",
+      "type": "string",
+      "default": "cozy-system"
+    },
+    "gridCentralUrl": {
+      "description": "FQDN of upstream grid-central.",
+      "type": "string",
+      "default": "http://grid-central.tenant-root.svc.cluster.local:8000"
+    },
+    "modelSyncIntervalSeconds": {
+      "type": "integer",
+      "minimum": 5,
+      "default": 30
+    },
+    "upstreamPollSeconds": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 5
+    },
+    "tickInterval": {
+      "type": "string",
+      "default": "1.0"
+    },
+    "imageTag": {
+      "type": "string",
+      "default": ""
+    },
+    "ingressEnabled": {
+      "type": "boolean",
+      "default": true
+    },
+    "ingressHostTemplate": {
+      "description": "Printf-style template; %d is replaced with the allocated instance number.",
+      "type": "string",
+      "default": "dso-%d.cozystack-demo.org"
+    },
+    "ingressClassName": {
+      "type": "string",
+      "default": "tenant-root"
+    },
+    "tlsEnabled": {
+      "type": "boolean",
+      "default": true
+    },
+    "tlsClusterIssuer": {
+      "type": "string",
+      "default": "letsencrypt-prod"
+    }
+  }
+}

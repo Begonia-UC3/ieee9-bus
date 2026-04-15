@@ -1,0 +1,68 @@
+{{- $ns := include "ieee9ZoneAuto.namespace" . -}}
+{{- $srcNs := .Values.patSecretNamespace -}}
+# ServiceAccount used by the pre-install Job that copies the PAT Secret
+# from cozy-system into the new namespace.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: dso-bootstrap
+  namespace: {{ $ns }}
+  labels:
+    {{- include "ieee9ZoneAuto.labels" . | nindent 4 }}
+---
+# Cluster-scoped role: read the PAT Secret in its source namespace.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ .Release.Name }}-dso-bootstrap-read
+  labels:
+    {{- include "ieee9ZoneAuto.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    resourceNames: [{{ .Values.patSecretName | quote }}]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ .Release.Name }}-dso-bootstrap-read
+  labels:
+    {{- include "ieee9ZoneAuto.labels" . | nindent 4 }}
+subjects:
+  - kind: ServiceAccount
+    name: dso-bootstrap
+    namespace: {{ $ns }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ .Release.Name }}-dso-bootstrap-read
+---
+# In-namespace role: write the copied Secret.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: dso-bootstrap-write
+  namespace: {{ $ns }}
+  labels:
+    {{- include "ieee9ZoneAuto.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "create", "update", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: dso-bootstrap-write
+  namespace: {{ $ns }}
+  labels:
+    {{- include "ieee9ZoneAuto.labels" . | nindent 4 }}
+subjects:
+  - kind: ServiceAccount
+    name: dso-bootstrap
+    namespace: {{ $ns }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: dso-bootstrap-write

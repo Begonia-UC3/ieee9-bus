@@ -1,0 +1,6 @@
+apiVersion: v2
+name: ieee9-zone-auto
+description: Auto-provisioned DSO instance — creates its own namespace, GitHub model repo, and wiring to grid-central. Instance number allocated at render time from the pool {2,3,4}.
+type: application
+version: 0.0.0
+appVersion: "0.1.0"

@@ -1,0 +1,18 @@
+{
+  "s_base": 100.0,
+  "description": "Auto-provisioned DSO slot 4 — 60 kV distribution feeder behind TSO bus 4. Modest ~20 MW aggregate load; edit freely.",
+  "buses": [
+    {"id": 1, "type": "slack",  "v_setpoint": 1.00, "p_gen_mw": 0,  "q_gen_mvar": 0, "p_load_mw": 0,  "q_load_mvar": 0, "base_kv": 230.0},
+    {"id": 2, "type": "pq",     "v_setpoint": 1.00, "p_gen_mw": 0,  "q_gen_mvar": 0, "p_load_mw": 0,  "q_load_mvar": 0, "base_kv": 60.0},
+    {"id": 3, "type": "pq",     "v_setpoint": 1.00, "p_gen_mw": 0,  "q_gen_mvar": 0, "p_load_mw": 7,  "q_load_mvar": 3, "base_kv": 60.0},
+    {"id": 4, "type": "pq",     "v_setpoint": 1.00, "p_gen_mw": 0,  "q_gen_mvar": 0, "p_load_mw": 8,  "q_load_mvar": 3, "base_kv": 60.0},
+    {"id": 5, "type": "pq",     "v_setpoint": 1.00, "p_gen_mw": 0,  "q_gen_mvar": 0, "p_load_mw": 5,  "q_load_mvar": 2, "base_kv": 60.0}
+  ],
+  "branches": [
+    {"from": 1, "to": 2, "r_pu": 0.0,    "x_pu": 0.08,   "b_pu": 0.0,  "rate_mva": 60, "is_transformer": true},
+    {"from": 2, "to": 3, "r_pu": 0.013,  "x_pu": 0.068,  "b_pu": 0.08, "rate_mva": 40, "is_transformer": false},
+    {"from": 3, "to": 4, "r_pu": 0.019,  "x_pu": 0.090,  "b_pu": 0.06, "rate_mva": 30, "is_transformer": false},
+    {"from": 2, "to": 5, "r_pu": 0.023,  "x_pu": 0.108,  "b_pu": 0.04, "rate_mva": 30, "is_transformer": false}
+  ],
+  "external_tie": {"bus_id": 1, "asset_id": "dso-4"}
+}

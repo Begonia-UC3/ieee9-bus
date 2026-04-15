@@ -1,6 +1,6 @@
 ## @section Mode
 
-## @param {string} mode="diesel" - Zone type. One of: diesel, battery, datacenter, dso.
+## @param {string} mode="diesel" - Zone type. One of: diesel, dso. (battery and datacenter live inside ieee9-grid.)
 mode: "diesel"
 
 ## @section Image

@@ -55,6 +55,7 @@ ASSET_BUS_MAP = {
     "diesel-gen":  2,   # Generator on Bus 2
     "battery":     3,   # Generator/load on Bus 3
     "datacenter":  5,   # Load on Bus 5
+    "dso":         6,   # DSO aggregator on Bus 6 (replaces the anonymous 90 MW load)
 }
 
 S_BASE = 100.0  # MVA base

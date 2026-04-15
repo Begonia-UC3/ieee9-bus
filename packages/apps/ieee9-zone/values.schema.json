@@ -5,7 +5,7 @@
     "mode": {
       "description": "Zone type.",
       "type": "string",
-      "enum": ["diesel", "battery", "datacenter", "dso"],
+      "enum": ["diesel", "dso"],
       "default": "diesel"
     },
     "imageTag": {

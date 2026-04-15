@@ -1,12 +1,19 @@
+{{- $services := dict
+  "grid-central" (dict "probePath" "/api/grid-state" "env" (dict "PYTHONUNBUFFERED" "1") "cpuReq" "200m" "memReq" "256Mi" "cpuLim" "500m" "memLim" "512Mi")
+  "battery"      (dict "probePath" "/api/status"     "env" (dict "PYTHONUNBUFFERED" "1" "GRID_CENTRAL_URL" "http://grid-central:8000" "TICK_INTERVAL" "1.0") "cpuReq" "100m" "memReq" "128Mi" "cpuLim" "300m" "memLim" "256Mi")
+  "datacenter"   (dict "probePath" "/api/status"     "env" (dict "PYTHONUNBUFFERED" "1" "GRID_CENTRAL_URL" "http://grid-central:8000" "TICK_INTERVAL" "1.0") "cpuReq" "100m" "memReq" "128Mi" "cpuLim" "300m" "memLim" "256Mi")
+-}}
 {{- $tag := include "ieee9-grid.imageTag" . -}}
+{{- range $component, $svc := $services }}
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: grid-central
+  name: {{ $component }}
   labels:
-    {{- include "ieee9-grid.labels" (dict "ctx" . "component" "grid-central") | nindent 4 }}
+    {{- include "ieee9-grid.labels" (dict "ctx" $ "component" $component) | nindent 4 }}
 spec:
-  replicas: {{ .Values.replicas }}
+  replicas: {{ $.Values.replicas }}
   strategy:
     type: RollingUpdate
     rollingUpdate:
@@ -14,11 +21,11 @@ spec:
       maxSurge: 1
   selector:
     matchLabels:
-      {{- include "ieee9-grid.selectorLabels" (dict "ctx" . "component" "grid-central") | nindent 6 }}
+      {{- include "ieee9-grid.selectorLabels" (dict "ctx" $ "component" $component) | nindent 6 }}
   template:
     metadata:
       labels:
-        {{- include "ieee9-grid.selectorLabels" (dict "ctx" . "component" "grid-central") | nindent 8 }}
+        {{- include "ieee9-grid.selectorLabels" (dict "ctx" $ "component" $component) | nindent 8 }}
     spec:
       securityContext:
         runAsNonRoot: true
@@ -27,25 +34,27 @@ spec:
         seccompProfile:
           type: RuntimeDefault
       containers:
-        - name: grid-central
-          image: "ghcr.io/begonia-uc3/ieee9-bus/grid-central:{{ $tag }}"
+        - name: {{ $component }}
+          image: "ghcr.io/begonia-uc3/ieee9-bus/{{ $component }}:{{ $tag }}"
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
               containerPort: 8000
               protocol: TCP
           env:
-            - name: PYTHONUNBUFFERED
-              value: "1"
+            {{- range $k, $v := $svc.env }}
+            - name: {{ $k }}
+              value: {{ $v | quote }}
+            {{- end }}
           readinessProbe:
             httpGet:
-              path: /api/grid-state
+              path: {{ $svc.probePath }}
               port: http
             initialDelaySeconds: 5
             periodSeconds: 10
           livenessProbe:
             httpGet:
-              path: /api/grid-state
+              path: {{ $svc.probePath }}
               port: http
             initialDelaySeconds: 15
             periodSeconds: 30
@@ -56,14 +65,15 @@ spec:
               drop: [ALL]
           resources:
             requests:
-              cpu: 200m
-              memory: 256Mi
+              cpu: {{ $svc.cpuReq }}
+              memory: {{ $svc.memReq }}
             limits:
-              cpu: 500m
-              memory: 512Mi
+              cpu: {{ $svc.cpuLim }}
+              memory: {{ $svc.memLim }}
           volumeMounts:
             - name: tmp
               mountPath: /tmp
       volumes:
         - name: tmp
           emptyDir: {}
+{{- end }}

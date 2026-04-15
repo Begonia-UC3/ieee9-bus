@@ -1,6 +1,6 @@
 apiVersion: v2
 name: ieee9-grid
-description: IEEE 9-Bus central power-flow engine (grid-central only — assets are deployed as Ieee9Zone CRs)
+description: IEEE 9-Bus central power-flow engine with battery and data-center asset simulators (diesel and DSO deploy separately as Ieee9Zone CRs)
 type: application
 version: 0.0.0
 appVersion: "0.1.0"

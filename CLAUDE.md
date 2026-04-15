@@ -20,10 +20,19 @@ external apps** (plural). Topology:
   from the operator's own Git repo via git-sync), then reports the
   aggregate flow at its external tie as a single asset upstream.
 
-All four asset services (`diesel-gen` / `battery` / `datacenter` /
-`dso`) are deployed through the **same** chart and the **same**
-`ApplicationDefinition` (`Ieee9Zone`) — the mode is selected per CR
-via `spec.mode`. One `Ieee9Zone` CR per asset role.
+The topology is packaged as **three** Cozystack apps:
+
+- `Ieee9Grid` (chart `ieee9-grid`) — deploys `grid-central`, `battery`,
+  and `datacenter` together as one central "plant". Inside-tenant
+  simulation core.
+- `Ieee9Zone` (chart `ieee9-zone`) with `spec.mode: diesel` — the
+  diesel generator on outer bus 2.
+- `Ieee9Zone` (chart `ieee9-zone`) with `spec.mode: dso` — a DSO on
+  outer bus 6, running its own Newton–Raphson over a user-supplied
+  grid model pulled from Git via a git-sync sidecar.
+
+`Ieee9Zone` supports exactly two modes (`diesel`, `dso`). Battery and
+datacenter are **not** modes — they live inside `Ieee9Grid`.
 
 Asset simulators iteratively POST telemetry to `grid-central`, which
 re-runs the power flow and broadcasts results back over WebSocket.
@@ -49,13 +58,13 @@ as a reference point. Ветка `dso` is the current direction.
 ├── deploy/
 │   └── compose.yaml         # local dev (docker compose / podman compose)
 ├── packages/
-│   ├── apps/ieee9-grid/     # grid-central only (the power-flow engine)
+│   ├── apps/ieee9-grid/     # grid-central + battery + datacenter (central plant)
 │   │   ├── Chart.yaml       # version 0.0.0 (bumped by upstream tooling)
 │   │   ├── Makefile
 │   │   ├── values.yaml
 │   │   ├── values.schema.json
 │   │   └── templates/
-│   ├── apps/ieee9-zone/     # generic asset zone (diesel | battery | datacenter | dso)
+│   ├── apps/ieee9-zone/     # separately-deployed asset zone (mode: diesel | dso)
 │   │   ├── Chart.yaml
 │   │   ├── Makefile
 │   │   ├── values.yaml      # mode + common wiring + DSO-only fields
@@ -117,8 +126,7 @@ That creates:
    - `ApplicationDefinition/ieee9-grid` + `HelmChart/ieee9-bus-ieee9-grid`
      (registers `Ieee9Grid`).
    - `ApplicationDefinition/ieee9-zone` + `HelmChart/ieee9-bus-ieee9-zone`
-     (registers `Ieee9Zone` with `spec.mode` ∈ {diesel, battery,
-     datacenter, dso}).
+     (registers `Ieee9Zone` with `spec.mode` ∈ {diesel, dso}).
 
 After ~30 s `kubectl api-resources --api-group=apps.cozystack.io` lists
 `ieee9grids` and `ieee9zones`. The dashboard exposes both under
@@ -138,8 +146,8 @@ kubectl -n cozy-system patch helmrelease ieee9-bus-platform \
 
 ### Creating an instance
 
-A full simulation requires one `Ieee9Grid` plus one `Ieee9Zone` per
-asset role — all in the **same** tenant namespace so in-namespace DNS
+A full simulation = one `Ieee9Grid` + two `Ieee9Zone` (modes `diesel`
+and `dso`), all in the **same** tenant namespace so in-namespace DNS
 (`http://grid-central:8000`) resolves between pods.
 
 ```yaml
@@ -174,14 +182,13 @@ apiVersion: apps.cozystack.io/v1alpha1
 kind: Ieee9Zone
 metadata:
   name: dso
-  namespace: tenant-root        # same tenant as Ieee9Grid
+  namespace: tenant-root
 spec:
   mode: dso
-  modelRepoUrl: "https://github.com/<user>/<model-repo>.git"
+  modelRepoUrl: "https://github.com/Begonia-UC3/dso-model.git"
   modelRepoBranch: main
   modelPath: model.json
   modelSyncIntervalSeconds: 30
-  assetId: datacenter           # DSO replaces outer bus-5 role
   gridCentralUrl: "http://grid-central:8000"
   ingressEnabled: true
   ingressHost: dso.cozystack-demo.org
@@ -189,27 +196,30 @@ spec:
 ```
 
 Cozystack renders each `Ieee9Zone` into a `HelmRelease` named
-`zone-<instance-name>`. The Deployment / Service inside always use the
-**mode's canonical name** as the workload name (`diesel-gen`, `battery`,
-`datacenter`, `dso`) so cross-asset DNS stays predictable. Two
+`zone-<instance-name>`. The Deployment / Service inside use the
+mode's canonical workload name (`diesel-gen` for `mode: diesel`, `dso`
+for `mode: dso`) so cross-asset DNS stays predictable. Two
 `Ieee9Zone` CRs with the same mode in the same namespace would
-collide — by design, one asset role per tenant.
+collide on the workload name — by design, one zone of each mode per
+tenant.
 
 ### DSO mode specifics
 
 When `spec.mode: dso`, the chart injects a **git-sync** sidecar
-(`registry.k8s.io/git-sync/git-sync:v4.3.0`) that clones the user's
-model repo into a shared `emptyDir` volume at `/model/current/…`. The
-main DSO process watches the model file's mtime each tick and
+(`registry.k8s.io/git-sync/git-sync:v4.3.0`) that clones the operator's
+public model repo into a shared `emptyDir` volume at `/model/current/…`.
+The main DSO process watches the model file's mtime each tick and
 rebuilds its Y-bus + bus state in-place on any change — **no pod
 restart**, WebSocket clients survive reloads.
 
 The model JSON contract is documented at the top of `dso/main.py`.
-Minimum shape: `s_base`, `buses[]`, `branches[]`, `external_tie`.
-The `external_tie.asset_id` must match a key in `grid-central`'s
-`ASSET_BUS_MAP` (currently `diesel-gen`, `battery`, `datacenter`) —
-the DSO reports its net tie flow using that asset_id, so upstream it
-occupies one of the outer IEEE-9 asset bus roles.
+Minimum shape: `s_base`, `buses[]`, `branches[]`, `external_tie`. The
+`external_tie.asset_id` must be a key in `grid-central`'s
+`ASSET_BUS_MAP` (`diesel-gen`, `battery`, `datacenter`, `dso`). The
+default DSO model uses `"dso"` → outer bus 6 (the anonymous 90 MW
+load slot). The `Ieee9Zone.spec.assetId` value can override
+`external_tie.asset_id` at runtime if the operator wants the same DSO
+process to occupy a different outer role.
 
 First iteration assumes **public** model repos — no Secret wiring for
 git-sync auth yet. Add when needed.
@@ -353,7 +363,8 @@ dashboard.
 - **DSO `external_tie.asset_id` must match `ASSET_BUS_MAP`.** DSO
   reports as that asset_id to `grid-central`; if the id isn't in
   `ASSET_BUS_MAP`, the injection is silently ignored. Current valid
-  values: `diesel-gen`, `battery`, `datacenter`.
+  values: `diesel-gen`, `battery`, `datacenter`, `dso`. The conventional
+  default for the nested-grid concept is `"dso"` → bus 6.
 
 ## Quick links
 

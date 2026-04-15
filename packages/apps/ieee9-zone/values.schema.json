@@ -55,6 +55,17 @@
       "type": "string",
       "default": ""
     },
+    "upstreamBusId": {
+      "description": "Outer-grid bus ID whose voltage DSO should use as its slack V_setpoint. Empty disables the closed loop.",
+      "type": "string",
+      "default": "6"
+    },
+    "upstreamPollSeconds": {
+      "description": "Interval for polling upstream grid-central state.",
+      "type": "integer",
+      "minimum": 1,
+      "default": 5
+    },
     "ingressEnabled": {
       "description": "Expose the zone HTTP UI via Ingress.",
       "type": "boolean",

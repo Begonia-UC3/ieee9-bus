@@ -51,6 +51,10 @@ spec:
             - name: ASSET_ID
               value: {{ .Values.assetId | quote }}
             {{- end }}
+            - name: UPSTREAM_BUS_ID
+              value: {{ .Values.upstreamBusId | quote }}
+            - name: UPSTREAM_POLL_SECONDS
+              value: {{ .Values.upstreamPollSeconds | quote }}
             {{- end }}
           readinessProbe:
             httpGet:

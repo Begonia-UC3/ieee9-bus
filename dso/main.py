@@ -54,6 +54,11 @@ MODEL_PATH = os.getenv("MODEL_PATH", "/model/model.json")
 ASSET_ID_OVERRIDE = os.getenv("ASSET_ID", "")  # optional override of external_tie.asset_id
 AUTO_MODE = os.getenv("AUTO_MODE", "true").lower() in ("1", "true", "yes")
 AUTO_AMPLITUDE = float(os.getenv("AUTO_AMPLITUDE", "0.15"))  # ±15% of base load
+# Closed-loop feedback: poll upstream grid-central for the V at our outer bus
+# and use it as our internal slack V_setpoint. Empty string disables.
+UPSTREAM_BUS_ID = os.getenv("UPSTREAM_BUS_ID", "6").strip()
+UPSTREAM_POLL_SECONDS = float(os.getenv("UPSTREAM_POLL_SECONDS", "5"))
+UPSTREAM_TIMEOUT = float(os.getenv("UPSTREAM_TIMEOUT", "2.0"))
 
 
 class DSOEngine:
@@ -77,6 +82,10 @@ class DSOEngine:
         self.external_tie: dict = {"bus_id": None, "asset_id": "datacenter"}
         self.last_solve: Optional[dict] = None
         self.last_error: Optional[str] = None
+        # Closed-loop upstream feedback (V at our outer bus, polled async).
+        self.upstream_v_pu: Optional[float] = None
+        self.upstream_v_updated_at: float = 0.0
+        self.upstream_last_error: Optional[str] = None
 
     def reload_if_changed(self) -> bool:
         """Returns True if the model was (re)loaded on this call."""
@@ -165,6 +174,15 @@ class DSOEngine:
                 self.P_load[i] = self.P_load_base[i] * osc
                 self.Q_load[i] = self.Q_load_base[i] * osc
 
+        slack = next((i for i, t in enumerate(self.bus_types) if t == "slack"), 0)
+
+        # Closed-loop: if we've heard a fresh V from upstream grid-central,
+        # use it as our slack V_setpoint. Otherwise fall back to the model
+        # value already in self.V[slack]. Stale data still beats a divergence
+        # from upstream — only "never-received" triggers fallback.
+        if self.upstream_v_pu is not None and self.upstream_v_pu > 0.5:
+            self.V[slack] = self.upstream_v_pu
+
         P_spec = self.P_gen - self.P_load
         Q_spec = self.Q_gen - self.Q_load
         V = self.V.copy()
@@ -172,7 +190,6 @@ class DSOEngine:
 
         pq_buses = [i for i, t in enumerate(self.bus_types) if t == "pq"]
         pv_buses = [i for i, t in enumerate(self.bus_types) if t == "pv"]
-        slack = next((i for i, t in enumerate(self.bus_types) if t == "slack"), 0)
         non_slack = [i for i in range(self.n) if i != slack]
 
         converged = False
@@ -308,6 +325,12 @@ class DSOEngine:
             ],
             "branches": branches_out,
             "slack": {"bus_id": self.bus_ids[slack], "p_mw": round(slack_P, 3), "q_mvar": round(slack_Q, 3)},
+            "upstream_feedback": {
+                "outer_bus_id": UPSTREAM_BUS_ID or None,
+                "v_pu": self.upstream_v_pu,
+                "age_s": round(time.time() - self.upstream_v_updated_at, 2) if self.upstream_v_updated_at else None,
+                "last_error": self.upstream_last_error,
+            },
             "timestamp": time.time(),
         }
         return self.last_solve
@@ -315,6 +338,42 @@ class DSOEngine:
 
 engine = DSOEngine()
 ws_clients: list[WebSocket] = []
+
+
+async def upstream_poll_loop():
+    """Background: fetch upstream grid-state, extract V at our outer bus.
+    Runs independently of sim_loop so a slow/down upstream never blocks ticks.
+    Failure modes are non-fatal: keep last known value, log to last_error."""
+    if not UPSTREAM_BUS_ID:
+        print("[dso] upstream feedback disabled (UPSTREAM_BUS_ID empty)")
+        return
+    try:
+        target_bus_id = int(UPSTREAM_BUS_ID)
+    except ValueError:
+        engine.upstream_last_error = f"invalid UPSTREAM_BUS_ID: {UPSTREAM_BUS_ID!r}"
+        print(f"[dso] {engine.upstream_last_error}")
+        return
+    url = f"{GRID_CENTRAL_URL}/api/grid-state"
+    async with httpx.AsyncClient(timeout=UPSTREAM_TIMEOUT) as client:
+        while True:
+            try:
+                r = await client.get(url)
+                r.raise_for_status()
+                data = r.json()
+                bus = next((b for b in data.get("buses", []) if b.get("id") == target_bus_id), None)
+                if bus is None:
+                    engine.upstream_last_error = f"bus {target_bus_id} not in upstream grid-state"
+                else:
+                    v = float(bus.get("v_pu", 0))
+                    if v > 0.5:
+                        engine.upstream_v_pu = v
+                        engine.upstream_v_updated_at = time.time()
+                        engine.upstream_last_error = None
+                    else:
+                        engine.upstream_last_error = f"upstream v_pu out of range: {v}"
+            except Exception as e:
+                engine.upstream_last_error = f"upstream poll failed: {e}"
+            await asyncio.sleep(UPSTREAM_POLL_SECONDS)
 
 
 async def sim_loop():
@@ -364,9 +423,11 @@ async def sim_loop():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     engine.reload_if_changed()
-    task = asyncio.create_task(sim_loop())
+    sim_task = asyncio.create_task(sim_loop())
+    upstream_task = asyncio.create_task(upstream_poll_loop())
     yield
-    task.cancel()
+    sim_task.cancel()
+    upstream_task.cancel()
 
 
 app = FastAPI(title="DSO Simulator", lifespan=lifespan)

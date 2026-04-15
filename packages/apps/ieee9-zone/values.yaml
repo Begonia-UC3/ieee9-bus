@@ -38,6 +38,12 @@ modelSyncIntervalSeconds: 30
 ## @param {string} assetId="" - Override the external-tie asset_id (defaults to value from model JSON).
 assetId: ""
 
+## @param {string} upstreamBusId="6" - Outer-grid bus ID whose voltage DSO should treat as its slack V_setpoint. Empty disables the closed loop.
+upstreamBusId: "6"
+
+## @param {int} upstreamPollSeconds=5 - Interval for polling upstream grid-central state.
+upstreamPollSeconds: 5
+
 ## @section Ingress
 
 ## @param {boolean} ingressEnabled=false - Expose the zone HTTP UI via Ingress.

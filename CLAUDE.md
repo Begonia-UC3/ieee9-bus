@@ -8,7 +8,8 @@ project-specific knowledge.
 ## What this repo is
 
 A four-service simulation of the **IEEE 9-bus power grid**, packaged
-as a **Cozystack external app**. Topology:
+as **Cozystack external apps** (plural — one app per grid "zone").
+Topology:
 
 - `grid-central` — FastAPI Newton–Raphson power-flow engine + WebSocket
   dashboard.
@@ -18,6 +19,28 @@ as a **Cozystack external app**. Topology:
 
 Asset simulators iteratively POST telemetry to `grid-central`, which
 re-runs the power flow and broadcasts results back over WebSocket.
+
+### App split (zones)
+
+The services are packaged across **multiple** Cozystack apps rather
+than one monolithic chart:
+
+- `ieee9-grid` (kind `Ieee9Grid`) — bundles `grid-central`, `battery`,
+  `datacenter`.
+- `ieee9-diesel` (kind `Ieee9Diesel`) — standalone `diesel-gen`.
+
+Each zone app is registered as its own `ApplicationDefinition` +
+`HelmChart` in `packages/core/platform/templates/`. Asset simulators
+reach `grid-central` via in-namespace DNS (`http://grid-central:8000`),
+so **all zone CRs of one simulation must live in the same tenant
+namespace** — otherwise the cross-service lookup fails silently (and
+grid-central falls back to the IEEE 9-bus base case for the missing
+asset, see "Behavioural gotchas" below).
+
+Cross-tenant DSO-style topologies (where a zone runs its own internal
+power flow before reporting up to `grid-central`) are on the roadmap
+but not yet wired — they would use FQDNs like
+`grid-central.tenant-foo.svc.cluster.local:8000`.
 
 ## Repository layout
 
@@ -31,18 +54,19 @@ re-runs the power flow and broadcasts results back over WebSocket.
 ├── deploy/
 │   └── compose.yaml         # local dev (docker compose / podman compose)
 ├── packages/
-│   ├── apps/ieee9-grid/     # Helm chart rendering the four workloads
+│   ├── apps/ieee9-grid/     # grid-central + battery + datacenter
 │   │   ├── Chart.yaml       # version 0.0.0 (bumped by upstream tooling)
 │   │   ├── Makefile         # cozyhr targets via scripts/package.mk
 │   │   ├── values.yaml      # user-facing knobs only
 │   │   ├── values.schema.json
 │   │   └── templates/       # _helpers, deployment, service, ingress
-│   └── core/platform/       # Cozystack glue
+│   ├── apps/ieee9-diesel/   # standalone diesel-gen (mirrors ieee9-grid layout)
+│   └── core/platform/       # Cozystack glue — registers all zone apps
 │       ├── Chart.yaml
 │       ├── Makefile
 │       └── templates/
-│           ├── cozyrds.yaml      # ApplicationDefinition (dashboard wiring)
-│           └── helmcharts.yaml   # Flux HelmChart pointing at apps/ieee9-grid
+│           ├── cozyrds.yaml      # one ApplicationDefinition per zone
+│           └── helmcharts.yaml   # one Flux HelmChart per zone
 ├── scripts/package.mk       # cozyhr apply/diff/delete shared helpers
 ├── init.yaml                # GitRepository + bootstrap HelmRelease
 └── .github/workflows/
@@ -89,37 +113,69 @@ That creates:
 1. `GitRepository/ieee9-bus` in `cozy-public` (1m sync of `main`).
 2. `HelmRelease/ieee9-bus-platform` in `cozy-system` deploying
    `./packages/core/platform`.
-3. The platform chart in turn applies:
-   - `ApplicationDefinition/ieee9-grid` (registers the
-     `apps.cozystack.io/v1alpha1 Ieee9Grid` CRD into the dashboard).
-   - `HelmChart/ieee9-bus-ieee9-grid` in `cozy-public` pointing at
-     `./packages/apps/ieee9-grid`.
+3. The platform chart in turn applies, per zone:
+   - `ApplicationDefinition/<zone>` (registers the
+     `apps.cozystack.io/v1alpha1 <Kind>` type into the dashboard).
+   - `HelmChart/ieee9-bus-<zone>` in `cozy-public` pointing at
+     `./packages/apps/<zone>`.
+
+   Currently two zones: `ieee9-grid` (kind `Ieee9Grid`) and
+   `ieee9-diesel` (kind `Ieee9Diesel`).
 
 After ~30 s `kubectl api-resources --api-group=apps.cozystack.io` lists
-`ieee9grids`. The dashboard exposes the app under category
-**Simulation**.
+`ieee9grids` and `ieee9diesels`. The dashboard exposes them under
+category **Simulation**.
+
+**Bootstrap gotcha — `reconcileStrategy`:** the platform
+`HelmRelease` must use `reconcileStrategy: Revision` (set in
+`init.yaml`). Because chart `version` is permanently `0.0.0`, Flux's
+default `ChartVersion` strategy never re-packages the chart on new Git
+revisions — zone additions / schema edits would silently stop
+applying. On clusters bootstrapped before this field existed, patch in
+place:
+
+```bash
+kubectl -n cozy-system patch helmrelease ieee9-bus-platform \
+  --type=merge -p '{"spec":{"chart":{"spec":{"reconcileStrategy":"Revision"}}}}'
+```
 
 ### Creating an instance
+
+A full simulation requires **one CR per zone**, all in the same
+tenant namespace (for in-cluster DNS between `diesel-gen` → `grid-central`):
 
 ```yaml
 apiVersion: apps.cozystack.io/v1alpha1
 kind: Ieee9Grid
 metadata:
   name: demo
-  namespace: tenant-root        # or any other Cozystack tenant ns
+  namespace: tenant-root
 spec:
   replicas: 1
   ingressEnabled: true
   ingressHost: ieee9.cozystack-demo.org
   ingressClassName: tenant-root
-  tlsEnabled: true              # default — provisions LE cert via cert-manager
+  tlsEnabled: true              # provisions LE cert via cert-manager
+  tlsClusterIssuer: letsencrypt-prod
+---
+apiVersion: apps.cozystack.io/v1alpha1
+kind: Ieee9Diesel
+metadata:
+  name: demo
+  namespace: tenant-root
+spec:
+  replicas: 1
+  gridCentralUrl: "http://grid-central:8000"
+  ingressEnabled: true
+  ingressHost: diesel.cozystack-demo.org
+  ingressClassName: tenant-root
+  tlsEnabled: true
   tlsClusterIssuer: letsencrypt-prod
 ```
 
-Cozystack renders this into a `HelmRelease` named `grid-<instance-name>`
-(prefix from `ApplicationDefinition.spec.release.prefix`). Flux then
-pulls the chart from the GitRepository and applies the four
-Deployments + Services + Ingress.
+Cozystack renders each CR into a `HelmRelease` with the zone's
+`prefix` (→ `grid-demo`, `diesel-demo`). Flux pulls the charts from
+the GitRepository and applies the Deployments + Services + Ingress.
 
 ### Verifying
 
@@ -185,27 +241,34 @@ the `Containerfile` in each service dir.
 - **Don't add a Helm OCI publish step.** Cozystack pulls from
   `GitRepository`. Republishing as OCI duplicates the artefact and
   drifts.
-- **Don't add `charts/` again.** Bridge chart and standalone chart
-  are the same chart now (`packages/apps/ieee9-grid`).
+- **Don't add `charts/` again.** Zone charts live under
+  `packages/apps/<zone>/`; the `charts/` directory was removed in PR #3
+  and shouldn't come back.
+- **Don't re-merge zones into one chart.** The split (ieee9-grid /
+  ieee9-diesel / future zones) is intentional — each zone is its own
+  Cozystack app so tenants can deploy them independently.
 - **Don't bump chart `version`.** Cozystack uses Git revision as the
   artifact version. Bump `appVersion` to track image releases.
 - **Don't pin images by digest in templates.** The chart deploys
   `:<appVersion>` (overridable via `imageTag`). Digest pinning is
   done at the registry tag layer.
-- **Tenant namespace matters.** `Ieee9Grid` CRs must live in a
-  Cozystack tenant namespace (not `default`). The reference cluster's
-  only tenant is `tenant-root`.
+- **Tenant namespace matters.** Zone CRs (`Ieee9Grid`, `Ieee9Diesel`,
+  …) must live in a Cozystack tenant namespace (not `default`), and
+  **all zones of one simulation must share that namespace** —
+  cross-zone DNS (`http://grid-central:8000`) is resolved in-namespace.
+  The reference cluster's only tenant is `tenant-root`.
 - **DNS for ingress.** `*.cozystack-demo.org` resolves to
   `95.217.144.125` (the cluster's floating IP). Any other host
   requires an A/CNAME record before LE will issue a cert.
 
 ## When extending the schema
 
-Three places must be kept in sync — JSON Schema is the source of truth:
+Three places must be kept in sync per zone — JSON Schema is the source
+of truth:
 
-1. `packages/apps/ieee9-grid/values.yaml` (default values + `@param`
+1. `packages/apps/<zone>/values.yaml` (default values + `@param`
    docstrings).
-2. `packages/apps/ieee9-grid/values.schema.json` (validation).
+2. `packages/apps/<zone>/values.schema.json` (validation).
 3. `packages/core/platform/templates/cozyrds.yaml`
    (`spec.application.openAPISchema` mirrors values.schema.json;
    `spec.dashboard.keysOrder` controls the YAML editor field order in
@@ -214,9 +277,60 @@ Three places must be kept in sync — JSON Schema is the source of truth:
 Forgetting the third one means new fields stay invisible in the
 dashboard.
 
+## When splitting another asset into its own zone app
+
+Reference: the diesel-gen split (first commit on branch `distributed`,
+see `packages/apps/ieee9-diesel/` for the template). Same-tenant case
+— cross-tenant / DSO-style splits are different and not yet done.
+
+Steps, in order:
+
+1. **Create `packages/apps/ieee9-<zone>/`** mirroring `ieee9-diesel/`:
+   `Chart.yaml` (version `0.0.0`), `Makefile`, `values.yaml`,
+   `values.schema.json`, `templates/{_helpers.tpl,deployment.yaml,service.yaml,ingress.yaml}`.
+   Copy the ingress block verbatim — users expect the same
+   `ingressEnabled / ingressHost / …` knobs on every zone.
+2. **Remove the component** from `packages/apps/ieee9-grid/templates/`
+   (both the `$services` dict in `deployment.yaml` and the list in
+   `service.yaml`).
+3. **Register the new zone in platform glue:**
+   - Append a `HelmChart/ieee9-bus-ieee9-<zone>` entry to
+     `packages/core/platform/templates/helmcharts.yaml` (set
+     `reconcileStrategy: Revision`).
+   - Append an `ApplicationDefinition/ieee9-<zone>` to
+     `cozyrds.yaml` with a distinct `kind`, `plural`, `singular`, and
+     `prefix`. Mirror `openAPISchema` from the chart's
+     `values.schema.json`.
+4. **Verify locally:** `helm lint` and `helm template` both charts
+   plus `packages/core/platform`.
+5. **Flux sync:** push the branch, then on the cluster point
+   `GitRepository/ieee9-bus` at it and force-reconcile the platform
+   HelmRelease (needs `reconcileStrategy: Revision`, see bootstrap
+   gotcha above).
+6. **Create the zone CR** in the same tenant namespace as the other
+   zones. Cross-zone DNS is bare service name (`http://<service>:8000`).
+
+When the new zone needs to *also* reach a grid-central running in a
+different tenant (DSO topology), expose `gridCentralUrl` as a chart
+value and let the operator set an FQDN like
+`http://grid-central.tenant-other.svc.cluster.local:8000` —
+NetworkPolicy between tenants is a separate problem.
+
+## Behavioural gotchas
+
+- **`grid-central` has no TTL on asset overrides.** See
+  `grid-central/main.py:110-129` (`apply_asset_overrides`). Each
+  solve resets buses to the IEEE 9-bus base case, then overlays the
+  last value posted by each asset. Entries never expire — a dead
+  asset looks identical to a live one holding a steady setpoint, and
+  `grid-central` only falls back to base case after its own restart.
+  Keep this in mind when debugging "why did the power flow freeze".
+
 ## Quick links
 
 - Reference cluster dashboard: <https://dashboard.cozystack-demo.org>
-- Demo deployment (when running): <https://ieee9.cozystack-demo.org>
+- Demo deployment (when running):
+  - `ieee9-grid`: <https://ieee9.cozystack-demo.org>
+  - `ieee9-diesel`: <https://diesel.cozystack-demo.org>
 - GHCR org: <https://github.com/orgs/Begonia-UC3/packages>
 - Upstream pattern: <https://github.com/cozystack/external-apps-example/pull/2>

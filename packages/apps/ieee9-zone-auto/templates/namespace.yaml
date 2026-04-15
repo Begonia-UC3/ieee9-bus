@@ -27,7 +27,6 @@ metadata:
   name: {{ $tenantName }}
   namespace: {{ $parentNs }}
   labels:
-    ieee9-zone-auto/index: {{ $n | quote }}
     ieee9-zone-auto/owner: {{ include "ieee9ZoneAuto.owner" . | quote }}
     {{- include "ieee9ZoneAuto.labels" . | nindent 4 }}
 spec: {}

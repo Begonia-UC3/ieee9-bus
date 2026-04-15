@@ -46,3 +46,46 @@ spec:
         - tlsEnabled
       - - spec
         - tlsClusterIssuer
+---
+apiVersion: cozystack.io/v1alpha1
+kind: ApplicationDefinition
+metadata:
+  name: ieee9-diesel
+spec:
+  application:
+    kind: Ieee9Diesel
+    plural: ieee9diesels
+    singular: ieee9-diesel
+    openAPISchema: '{"title":"IEEE 9-Bus Diesel Generator","type":"object","properties":{"imageTag":{"description":"Override image tag. Defaults to the chart appVersion.","type":"string","default":""},"replicas":{"description":"Replica count for diesel-gen.","type":"integer","minimum":0,"default":1},"gridCentralUrl":{"description":"Base URL of the grid-central power-flow engine (in-namespace by default).","type":"string","default":"http://grid-central:8000"},"tickInterval":{"description":"Seconds between telemetry ticks.","type":"string","default":"1.0"}}}'
+  release:
+    chartRef:
+      kind: HelmChart
+      name: ieee9-bus-ieee9-diesel
+      namespace: cozy-public
+    labels:
+      cozystack.io/ui: "true"
+    prefix: diesel-
+  dashboard:
+    category: Simulation
+    singular: IEEE 9-Bus Diesel Generator
+    plural: IEEE 9-Bus Diesel Generators
+    description: Diesel generator asset simulator for the IEEE 9-Bus grid (bus 2 PV, 163 MW).
+    tags:
+      - simulation
+      - power-grid
+      - ieee9
+      - diesel
+    keysOrder:
+      - - apiVersion
+      - - kind
+      - - metadata
+      - - metadata
+        - name
+      - - spec
+        - replicas
+      - - spec
+        - imageTag
+      - - spec
+        - gridCentralUrl
+      - - spec
+        - tickInterval

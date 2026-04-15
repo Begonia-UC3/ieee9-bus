@@ -1,0 +1,17 @@
+## @section Image
+
+## @param {string} imageTag="" - Override image tag. Defaults to the chart appVersion.
+imageTag: ""
+
+## @section Workload
+
+## @param {int} replicas=1 - Replica count for diesel-gen.
+replicas: 1
+
+## @section Wiring
+
+## @param {string} gridCentralUrl="http://grid-central:8000" - Base URL of the grid-central power-flow engine (in-namespace by default).
+gridCentralUrl: "http://grid-central:8000"
+
+## @param {string} tickInterval="1.0" - Seconds between telemetry ticks.
+tickInterval: "1.0"

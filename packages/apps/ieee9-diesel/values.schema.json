@@ -1,0 +1,27 @@
+{
+  "title": "IEEE 9-Bus Diesel Generator",
+  "type": "object",
+  "properties": {
+    "imageTag": {
+      "description": "Override image tag. Defaults to the chart appVersion.",
+      "type": "string",
+      "default": ""
+    },
+    "replicas": {
+      "description": "Replica count for diesel-gen.",
+      "type": "integer",
+      "minimum": 0,
+      "default": 1
+    },
+    "gridCentralUrl": {
+      "description": "Base URL of the grid-central power-flow engine (in-namespace by default).",
+      "type": "string",
+      "default": "http://grid-central:8000"
+    },
+    "tickInterval": {
+      "description": "Seconds between telemetry ticks.",
+      "type": "string",
+      "default": "1.0"
+    }
+  }
+}

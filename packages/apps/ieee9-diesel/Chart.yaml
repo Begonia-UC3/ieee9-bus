@@ -1,0 +1,6 @@
+apiVersion: v2
+name: ieee9-diesel
+description: IEEE 9-Bus diesel generator asset simulator (bus 2 PV, 163 MW)
+type: application
+version: 0.0.0
+appVersion: "0.1.0"

@@ -1,6 +1,5 @@
 {{- $services := dict
   "grid-central" (dict "probePath" "/api/grid-state" "env" (dict "PYTHONUNBUFFERED" "1") "cpuReq" "200m" "memReq" "256Mi" "cpuLim" "500m" "memLim" "512Mi")
-  "diesel-gen"   (dict "probePath" "/api/status"     "env" (dict "PYTHONUNBUFFERED" "1" "GRID_CENTRAL_URL" "http://grid-central:8000" "TICK_INTERVAL" "1.0") "cpuReq" "100m" "memReq" "128Mi" "cpuLim" "300m" "memLim" "256Mi")
   "battery"      (dict "probePath" "/api/status"     "env" (dict "PYTHONUNBUFFERED" "1" "GRID_CENTRAL_URL" "http://grid-central:8000" "TICK_INTERVAL" "1.0") "cpuReq" "100m" "memReq" "128Mi" "cpuLim" "300m" "memLim" "256Mi")
   "datacenter"   (dict "probePath" "/api/status"     "env" (dict "PYTHONUNBUFFERED" "1" "GRID_CENTRAL_URL" "http://grid-central:8000" "TICK_INTERVAL" "1.0") "cpuReq" "100m" "memReq" "128Mi" "cpuLim" "300m" "memLim" "256Mi")
 -}}

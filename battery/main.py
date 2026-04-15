@@ -22,6 +22,7 @@ from pydantic import BaseModel
 GRID_CENTRAL_URL = os.getenv("GRID_CENTRAL_URL", "http://localhost:8000")
 ASSET_ID = "battery"
 TICK_INTERVAL = float(os.getenv("TICK_INTERVAL", "1.0"))
+AUTO_MODE = os.getenv("AUTO_MODE", "true").lower() in ("1", "true", "yes")
 
 # ── Battery Parameters ──
 RATED_POWER_MW = 85.0
@@ -52,6 +53,19 @@ class BESSState:
 
     def step(self, dt: float):
         self.tick += 1
+
+        # Auto mode: smooth charge/discharge cycle ~5 min period.
+        # Drive target_power_mw with a sinusoid of ±60% rated when SoC is in
+        # a usable band; let SoC bounds clip extremes.
+        if AUTO_MODE:
+            cycle = math.sin(self.tick * TICK_INTERVAL * 2 * math.pi / 300)  # 5-min period
+            self.target_power_mw = 0.6 * RATED_POWER_MW * cycle
+            if self.target_power_mw > 1.0:
+                self.mode = "discharging"
+            elif self.target_power_mw < -1.0:
+                self.mode = "charging"
+            else:
+                self.mode = "idle"
 
         # Ramp to target
         diff = self.target_power_mw - self.actual_power_mw

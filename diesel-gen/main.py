@@ -22,6 +22,7 @@ from pydantic import BaseModel
 GRID_CENTRAL_URL = os.getenv("GRID_CENTRAL_URL", "http://localhost:8000")
 ASSET_ID = "diesel-gen"
 TICK_INTERVAL = float(os.getenv("TICK_INTERVAL", "1.0"))
+AUTO_MODE = os.getenv("AUTO_MODE", "true").lower() in ("1", "true", "yes")
 
 # ── Engine Model Parameters ──
 RATED_POWER_MW = 163.0
@@ -55,6 +56,11 @@ class DieselGenState:
         """Advance simulation by dt seconds."""
         self.tick += 1
         self.runtime_hours += dt / 3600
+
+        # Auto mode: smooth setpoint walk between 40% and 90% rated.
+        if AUTO_MODE and self.running:
+            cycle = math.sin(self.tick * TICK_INTERVAL * 2 * math.pi / 240)  # 4-min period
+            self.target_load_pct = 65.0 + 25.0 * cycle
 
         if not self.running:
             # Cooldown

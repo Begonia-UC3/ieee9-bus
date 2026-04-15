@@ -52,6 +52,8 @@ GRID_CENTRAL_URL = os.getenv("GRID_CENTRAL_URL", "http://localhost:8000")
 TICK_INTERVAL = float(os.getenv("TICK_INTERVAL", "1.0"))
 MODEL_PATH = os.getenv("MODEL_PATH", "/model/model.json")
 ASSET_ID_OVERRIDE = os.getenv("ASSET_ID", "")  # optional override of external_tie.asset_id
+AUTO_MODE = os.getenv("AUTO_MODE", "true").lower() in ("1", "true", "yes")
+AUTO_AMPLITUDE = float(os.getenv("AUTO_AMPLITUDE", "0.15"))  # ±15% of base load
 
 
 class DSOEngine:
@@ -121,6 +123,10 @@ class DSOEngine:
         self.P_load = np.array([float(b.get("p_load_mw", 0.0)) / self.s_base for b in buses])
         self.Q_load = np.array([float(b.get("q_load_mvar", 0.0)) / self.s_base for b in buses])
 
+        # Snapshot of model loads (in pu) for AUTO_MODE perturbation around base.
+        self.P_load_base = self.P_load.copy()
+        self.Q_load_base = self.Q_load.copy()
+
         self.model = model
         self._build_ybus(branches)
 
@@ -147,6 +153,17 @@ class DSOEngine:
     def solve(self, max_iter: int = 20, tol: float = 1e-6) -> dict:
         if self.model is None or self.Y is None or self.n == 0:
             return {"converged": False, "reason": "no model loaded", "error": self.last_error}
+
+        # Auto-perturb internal loads around the model baseline so the diagram
+        # is alive even without a fresh model push. Per-bus phase staggering
+        # keeps the system from being a pure scalar multiple of the baseline.
+        if AUTO_MODE:
+            t = time.time()
+            for i in range(self.n):
+                phase = (i / max(1, self.n)) * 2 * math.pi
+                osc = 1.0 + AUTO_AMPLITUDE * math.sin(t * 2 * math.pi / 90 + phase)  # 90s period
+                self.P_load[i] = self.P_load_base[i] * osc
+                self.Q_load[i] = self.Q_load_base[i] * osc
 
         P_spec = self.P_gen - self.P_load
         Q_spec = self.Q_gen - self.Q_load

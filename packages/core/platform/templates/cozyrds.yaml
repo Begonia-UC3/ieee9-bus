@@ -77,7 +77,7 @@ spec:
     category: Simulation
     singular: IEEE 9-Bus Zone
     plural: IEEE 9-Bus Zones
-    description: Generic IEEE 9-Bus zone — one asset per CR (diesel, battery, datacenter, or DSO with a user-supplied model from Git).
+    description: External IEEE 9-Bus asset — one CR per asset role. Modes - diesel (single generator on bus 2) or dso (nested grid on bus 6, model pulled from Git via git-sync).
     tags:
       - simulation
       - power-grid

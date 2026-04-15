@@ -1,88 +1,56 @@
+{{- $parentNs := include "ieee9ZoneAuto.parentNamespace" . -}}
 {{- $ns := include "ieee9ZoneAuto.namespace" . -}}
-{{- $srcNs := .Values.patSecretNamespace -}}
-# ServiceAccount used by the pre-install Job that copies the PAT Secret
-# from cozy-system into the new namespace.
+# RBAC for the bootstrap Job. Lives in the PARENT tenant's namespace
+# (the child namespace doesn't exist yet when the pre-install hook runs —
+# Cozystack provisions it asynchronously after the Tenant CR lands).
+# The Job waits for the child namespace, then copies the PAT Secret into it.
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: dso-bootstrap
-  namespace: {{ $ns }}
+  name: {{ .Release.Name }}-bootstrap
+  namespace: {{ $parentNs }}
   labels:
     {{- include "ieee9ZoneAuto.labels" . | nindent 4 }}
   annotations:
     "helm.sh/hook": pre-install,pre-upgrade
     "helm.sh/hook-weight": "-15"
-    "helm.sh/hook-delete-policy": before-hook-creation
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
 ---
-# Cluster-scoped role: read the PAT Secret in its source namespace.
+# Read PAT Secret in cozy-system, watch Namespaces cluster-wide (to detect
+# when tenant-dso-N appears), write Secret into tenant-dso-N.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: {{ .Release.Name }}-dso-bootstrap-read
+  name: {{ .Release.Name }}-bootstrap
   labels:
     {{- include "ieee9ZoneAuto.labels" . | nindent 4 }}
   annotations:
     "helm.sh/hook": pre-install,pre-upgrade
     "helm.sh/hook-weight": "-15"
-    "helm.sh/hook-delete-policy": before-hook-creation
-rules:
-  - apiGroups: [""]
-    resources: ["secrets"]
-    resourceNames: [{{ .Values.patSecretName | quote }}]
-    verbs: ["get"]
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
-metadata:
-  name: {{ .Release.Name }}-dso-bootstrap-read
-  labels:
-    {{- include "ieee9ZoneAuto.labels" . | nindent 4 }}
-  annotations:
-    "helm.sh/hook": pre-install,pre-upgrade
-    "helm.sh/hook-weight": "-15"
-    "helm.sh/hook-delete-policy": before-hook-creation
-subjects:
-  - kind: ServiceAccount
-    name: dso-bootstrap
-    namespace: {{ $ns }}
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: ClusterRole
-  name: {{ .Release.Name }}-dso-bootstrap-read
----
-# In-namespace role: write the copied Secret.
-apiVersion: rbac.authorization.k8s.io/v1
-kind: Role
-metadata:
-  name: dso-bootstrap-write
-  namespace: {{ $ns }}
-  labels:
-    {{- include "ieee9ZoneAuto.labels" . | nindent 4 }}
-  annotations:
-    "helm.sh/hook": pre-install,pre-upgrade
-    "helm.sh/hook-weight": "-15"
-    "helm.sh/hook-delete-policy": before-hook-creation
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
 rules:
   - apiGroups: [""]
     resources: ["secrets"]
     verbs: ["get", "create", "update", "patch"]
+  - apiGroups: [""]
+    resources: ["namespaces"]
+    verbs: ["get", "list", "watch"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
-kind: RoleBinding
+kind: ClusterRoleBinding
 metadata:
-  name: dso-bootstrap-write
-  namespace: {{ $ns }}
+  name: {{ .Release.Name }}-bootstrap
   labels:
     {{- include "ieee9ZoneAuto.labels" . | nindent 4 }}
   annotations:
     "helm.sh/hook": pre-install,pre-upgrade
     "helm.sh/hook-weight": "-15"
-    "helm.sh/hook-delete-policy": before-hook-creation
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
 subjects:
   - kind: ServiceAccount
-    name: dso-bootstrap
-    namespace: {{ $ns }}
+    name: {{ .Release.Name }}-bootstrap
+    namespace: {{ $parentNs }}
 roleRef:
   apiGroup: rbac.authorization.k8s.io
-  kind: Role
-  name: dso-bootstrap-write
+  kind: ClusterRole
+  name: {{ .Release.Name }}-bootstrap

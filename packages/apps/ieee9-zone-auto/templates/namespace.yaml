@@ -1,19 +1,33 @@
 {{- include "ieee9ZoneAuto.validate" . -}}
-{{- $ns := include "ieee9ZoneAuto.namespace" . -}}
-# Namespace is a pre-install hook with an early weight so it exists
-# before the bootstrap Job (weight -5) needs to run inside it. We
-# deliberately don't use hook-delete-policy here — once created, the
-# namespace must outlive the hook phase so the regular chart resources
-# (Deployment, Service, Ingress) can land in it. The post-delete Job
-# cleans it up on release uninstall.
-apiVersion: v1
-kind: Namespace
+{{- $n := include "ieee9ZoneAuto.instanceNumber" . -}}
+{{- $tenantName := include "ieee9ZoneAuto.tenantName" . -}}
+{{- $parentNs := include "ieee9ZoneAuto.parentNamespace" . -}}
+# Optional: create the parent tenant idempotently if it doesn't exist.
+# Child of `root` (which Cozystack hosts in namespace `tenant-root`).
+{{- if .Values.autoCreateParentTenant }}
+apiVersion: apps.cozystack.io/v1alpha1
+kind: Tenant
 metadata:
-  name: {{ $ns }}
+  name: {{ .Values.parentTenant }}
+  namespace: tenant-root
+  annotations:
+    "helm.sh/resource-policy": keep
   labels:
+    {{- include "ieee9ZoneAuto.labels" . | nindent 4 }}
+spec: {}
+---
+{{- end }}
+# Per-DSO child tenant. Cozystack provisions namespace `tenant-dso-N`
+# from this CR. Regular (non-hook) Helm resource so `helm uninstall`
+# deletes the Tenant, which triggers Cozystack to tear down the
+# namespace and everything in it.
+apiVersion: apps.cozystack.io/v1alpha1
+kind: Tenant
+metadata:
+  name: {{ $tenantName }}
+  namespace: {{ $parentNs }}
+  labels:
+    ieee9-zone-auto/index: {{ $n | quote }}
     ieee9-zone-auto/owner: {{ include "ieee9ZoneAuto.owner" . | quote }}
     {{- include "ieee9ZoneAuto.labels" . | nindent 4 }}
-  annotations:
-    "helm.sh/hook": pre-install
-    "helm.sh/hook-weight": "-20"
-    "helm.sh/resource-policy": keep
+spec: {}

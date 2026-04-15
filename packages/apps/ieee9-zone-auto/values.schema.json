@@ -4,6 +4,16 @@
   "type": "object",
   "required": ["modelRepoOwner"],
   "properties": {
+    "parentTenant": {
+      "description": "Cozystack Tenant that parents the per-DSO child tenants. Child of root.",
+      "type": "string",
+      "default": "dsos"
+    },
+    "autoCreateParentTenant": {
+      "description": "Idempotently create the parent tenant as a child of root if missing.",
+      "type": "boolean",
+      "default": true
+    },
     "modelRepoOwner": {
       "description": "GitHub username that will own the auto-created model repo (e.g. your personal account).",
       "type": "string"

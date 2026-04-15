@@ -1,12 +1,14 @@
+{{- $parentNs := include "ieee9ZoneAuto.parentNamespace" . -}}
 {{- $ns := include "ieee9ZoneAuto.namespace" . -}}
-# Pre-install Job that copies the PAT Secret from the source namespace
-# (cozy-system by default) into the freshly-created per-instance namespace,
-# so the DSO pod's init-container and git-sync sidecar can mount it locally.
+# Pre-install Job: wait for Cozystack to provision `tenant-dso-N` (created
+# asynchronously from the Tenant CR), then copy the PAT Secret from
+# cozy-system into it so the DSO pod's init container and git-sync sidecar
+# can mount it.
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: copy-pat-secret
-  namespace: {{ $ns }}
+  name: {{ .Release.Name }}-bootstrap
+  namespace: {{ $parentNs }}
   labels:
     {{- include "ieee9ZoneAuto.labels" . | nindent 4 }}
   annotations:
@@ -15,13 +17,14 @@ metadata:
     "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
 spec:
   backoffLimit: 2
+  activeDeadlineSeconds: 300
   ttlSecondsAfterFinished: 300
   template:
     metadata:
       labels:
         {{- include "ieee9ZoneAuto.selectorLabels" . | nindent 8 }}
     spec:
-      serviceAccountName: dso-bootstrap
+      serviceAccountName: {{ .Release.Name }}-bootstrap
       restartPolicy: Never
       containers:
         - name: copy
@@ -29,11 +32,23 @@ spec:
           command: ["/bin/sh", "-c"]
           args:
             - |
-              set -euo pipefail
-              echo "Copying Secret {{ .Values.patSecretNamespace }}/{{ .Values.patSecretName }} → {{ $ns }}/github-pat"
-              kubectl get secret {{ .Values.patSecretName }} \
-                -n {{ .Values.patSecretNamespace }} -o json \
-                | jq 'del(.metadata.namespace,.metadata.resourceVersion,.metadata.uid,.metadata.creationTimestamp,.metadata.ownerReferences,.metadata.managedFields) | .metadata.name="github-pat"' \
+              set -eu
+              echo "Waiting for namespace {{ $ns }} (provisioned by Cozystack from the Tenant CR)..."
+              for i in $(seq 1 60); do
+                if kubectl get namespace {{ $ns }} >/dev/null 2>&1; then
+                  echo "Namespace {{ $ns }} exists."
+                  break
+                fi
+                sleep 3
+              done
+              kubectl get namespace {{ $ns }}
+              echo "Copying Secret {{ .Values.patSecretNamespace }}/{{ .Values.patSecretName }} -> {{ $ns }}/github-pat"
+              kubectl get secret {{ .Values.patSecretName }} -n {{ .Values.patSecretNamespace }} -o json \
+                | kubectl create secret generic github-pat \
+                    -n {{ $ns }} \
+                    --from-literal=username="$(kubectl get secret {{ .Values.patSecretName }} -n {{ .Values.patSecretNamespace }} -o jsonpath='{.data.username}' | base64 -d)" \
+                    --from-literal=token="$(kubectl get secret {{ .Values.patSecretName }} -n {{ .Values.patSecretNamespace }} -o jsonpath='{.data.token}' | base64 -d)" \
+                    --dry-run=client -o yaml \
                 | kubectl apply -n {{ $ns }} -f -
               echo "done"
           securityContext:

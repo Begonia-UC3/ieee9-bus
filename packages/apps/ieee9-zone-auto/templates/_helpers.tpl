@@ -23,10 +23,10 @@ release, so two concurrent click-deploys don't collide.
 {{- $pool := list 2 3 4 -}}
 {{- $taken := list -}}
 {{- $self := printf "%s/%s" .Release.Namespace .Release.Name -}}
-{{- $nsList := (lookup "v1" "Namespace" "" "") -}}
-{{- if $nsList -}}
-  {{- range $ns := $nsList.items -}}
-    {{- $labels := $ns.metadata.labels | default (dict) -}}
+{{- $tList := (lookup "apps.cozystack.io/v1alpha1" "Tenant" "" "") -}}
+{{- if $tList -}}
+  {{- range $t := $tList.items -}}
+    {{- $labels := $t.metadata.labels | default (dict) -}}
     {{- $idxStr := index $labels "ieee9-zone-auto/index" -}}
     {{- $owner  := index $labels "ieee9-zone-auto/owner" -}}
     {{- if and $idxStr (ne $owner $self) -}}
@@ -63,11 +63,29 @@ Asset id reported upstream: "dso-N".
 {{- end }}
 
 {{/*
-Target namespace for the deployed DSO: tenant-dso-N.
+Target namespace for the deployed DSO: tenant-dso-N (provisioned by
+Cozystack from the Tenant CR).
 */}}
 {{- define "ieee9ZoneAuto.namespace" -}}
 {{- $n := include "ieee9ZoneAuto.instanceNumber" . -}}
 {{- printf "tenant-dso-%s" $n -}}
+{{- end }}
+
+{{/*
+Parent tenant's namespace — where the DSO's Tenant CR and the
+bootstrap Job live.
+*/}}
+{{- define "ieee9ZoneAuto.parentNamespace" -}}
+{{- printf "tenant-%s" .Values.parentTenant -}}
+{{- end }}
+
+{{/*
+Short name of the DSO's own Tenant CR. Cozystack renders this into
+namespace `tenant-dso-N`.
+*/}}
+{{- define "ieee9ZoneAuto.tenantName" -}}
+{{- $n := include "ieee9ZoneAuto.instanceNumber" . -}}
+{{- printf "dso-%s" $n -}}
 {{- end }}
 
 {{/*

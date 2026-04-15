@@ -1,3 +1,11 @@
+## @section Tenant hierarchy
+
+## @param {string} parentTenant="dsos" - Cozystack Tenant that parents the per-DSO child tenants. Must be a child of `root`. If it doesn't exist and autoCreateParentTenant=true, the chart creates it.
+parentTenant: "dsos"
+
+## @param {boolean} autoCreateParentTenant=true - Idempotently create the parent tenant as a child of `root` if missing.
+autoCreateParentTenant: true
+
 ## @section Repo provisioning
 
 ## @param {string} modelRepoOwner="" - GitHub username that will own the auto-created model repo (e.g. your personal account). Required.

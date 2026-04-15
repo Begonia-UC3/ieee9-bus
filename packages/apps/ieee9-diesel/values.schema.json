@@ -22,6 +22,43 @@
       "description": "Seconds between telemetry ticks.",
       "type": "string",
       "default": "1.0"
+    },
+    "ingressEnabled": {
+      "description": "Expose diesel-gen via Ingress.",
+      "type": "boolean",
+      "default": false
+    },
+    "ingressHost": {
+      "description": "Ingress host when enabled.",
+      "type": "string",
+      "default": "diesel.example.com"
+    },
+    "ingressClassName": {
+      "description": "Optional IngressClass name.",
+      "type": "string",
+      "default": ""
+    },
+    "tlsEnabled": {
+      "description": "Issue an LE certificate via cert-manager when ingress is enabled.",
+      "type": "boolean",
+      "default": true
+    },
+    "tlsClusterIssuer": {
+      "description": "cert-manager ClusterIssuer used for the certificate.",
+      "type": "string",
+      "default": "letsencrypt-prod"
     }
-  }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "ingressEnabled": { "const": true } },
+        "required": ["ingressEnabled"]
+      },
+      "then": {
+        "properties": { "ingressHost": { "minLength": 1 } },
+        "required": ["ingressHost"]
+      }
+    }
+  ]
 }

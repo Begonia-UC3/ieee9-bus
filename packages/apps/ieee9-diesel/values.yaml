@@ -15,3 +15,20 @@ gridCentralUrl: "http://grid-central:8000"
 
 ## @param {string} tickInterval="1.0" - Seconds between telemetry ticks.
 tickInterval: "1.0"
+
+## @section Ingress
+
+## @param {boolean} ingressEnabled=false - Expose diesel-gen via Ingress.
+ingressEnabled: false
+
+## @param {string} ingressHost="diesel.example.com" - Ingress host when enabled.
+ingressHost: "diesel.example.com"
+
+## @param {string} ingressClassName="" - Optional IngressClass name.
+ingressClassName: ""
+
+## @param {boolean} tlsEnabled=true - Issue an LE certificate via cert-manager when ingress is enabled.
+tlsEnabled: true
+
+## @param {string} tlsClusterIssuer="letsencrypt-prod" - cert-manager ClusterIssuer used for the certificate.
+tlsClusterIssuer: "letsencrypt-prod"

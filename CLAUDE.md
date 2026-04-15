@@ -293,19 +293,28 @@ for local testing without a real Git repo.
 - **Don't add `charts/` again.** Charts live under
   `packages/apps/<name>/`; the `charts/` directory was removed in PR #3
   and shouldn't come back.
-- **Don't re-merge into one chart.** `ieee9-grid` (just grid-central)
-  and `ieee9-zone` (all asset types via `mode`) are intentionally
-  separate so tenants can deploy assets independently of the central
-  engine.
+- **Don't re-merge zones into ieee9-grid.** `ieee9-grid` (gc + battery
+  + datacenter) and `ieee9-zone` (modes diesel + dso) are intentionally
+  separate. Battery and datacenter are bundled into the central plant
+  because they're always on; diesel and DSO are deployed independently
+  per tenant via `Ieee9Zone` because they vary per simulation.
 - **Don't add a new kind per asset.** The point of `Ieee9Zone` with
-  `spec.mode` is that battery/datacenter/diesel/dso all share one
-  ApplicationDefinition. A new asset type = a new image + an added
-  value in the `mode` enum + updated schema, not a new kind.
+  `spec.mode` is one ApplicationDefinition for all *external*
+  assets. A new external asset type = a new image + an added value in
+  the `mode` enum + updated schema, not a new kind.
 - **Don't bump chart `version`.** Cozystack uses Git revision as the
   artifact version. Bump `appVersion` to track image releases.
 - **Don't pin images by digest in templates.** The chart deploys
   `:<appVersion>` (overridable via `imageTag`). Digest pinning is
   done at the registry tag layer.
+- **Image tag `:<appVersion>` may not exist on non-default branches.**
+  CI's `metadata-action` publishes `:latest` only on `main`, plus
+  `:sha-<short>`, `:<branch-name>`, and semver tags from `v*` git
+  tags. The chart's default `image: …:0.1.0` only resolves if a
+  `v0.1.0` tag was once pushed. When deploying a service that was
+  first introduced on a feature branch (e.g., `dso` on branch `dso`),
+  `:0.1.0` won't exist yet — set `spec.imageTag` on the CR to the
+  branch tag (`dso`) or a `sha-…` tag until the next semver release.
 - **Tenant namespace matters.** Both `Ieee9Grid` and `Ieee9Zone` CRs
   must live in a Cozystack tenant namespace (not `default`), and
   **all CRs of one simulation must share a namespace** — cross-zone
@@ -359,16 +368,59 @@ dashboard.
   not change depending on the git object actually changing. If pushes
   to the model repo don't visibly reload, check `kubectl logs -c
   git-sync` and make sure the commit actually modified the target
-  file.
+  file. **Verified end-to-end** on dso branch deploy: a 40 → 80 MW
+  load bump reflected in `tie_injection.p_mw` within ~50s of `git
+  push`, with pod RESTARTS = 0 (no cold start).
 - **DSO `external_tie.asset_id` must match `ASSET_BUS_MAP`.** DSO
   reports as that asset_id to `grid-central`; if the id isn't in
   `ASSET_BUS_MAP`, the injection is silently ignored. Current valid
   values: `diesel-gen`, `battery`, `datacenter`, `dso`. The conventional
   default for the nested-grid concept is `"dso"` → bus 6.
 
+## Operational gotchas
+
+- **Codespace `GITHUB_TOKEN` is scoped to *this* repo only.** Even if
+  the user account has write access to `Begonia-UC3/dso-model` (or
+  any other org repo), the codespace's auto-injected token can't push
+  there — pushes 403 with "Permission denied to filokot". Two ways to
+  extend:
+  - Declarative (preferred): `.devcontainer/devcontainer.json` →
+    `customizations.codespaces.repositories.<owner/repo>.permissions`
+    declares additional repos. Already configured for
+    `Begonia-UC3/dso-model` (write). Requires a fresh codespace to take
+    effect — existing codespaces keep the old token.
+  - Ad-hoc: have the user create a classic PAT
+    (`https://github.com/settings/tokens`, scope `repo`) and pipe it
+    via `! echo $PAT | gh auth login --hostname github.com
+    --git-protocol https --with-token`. Use only as a last resort —
+    PATs typed into chat are visible in conversation logs and must be
+    revoked immediately after use.
+- **`kubectl api-resources --api-group=apps.cozystack.io` is stale**
+  after a platform `HelmRelease` upgrade adds/removes
+  `ApplicationDefinition`s. The cozystack-api dynamically registers
+  these via API aggregation, but `kubectl`'s discovery cache lags. To
+  bypass, query the API directly:
+  ```bash
+  kubectl get --raw /apis/apps.cozystack.io/v1alpha1
+  ```
+  Returns the live list of currently-registered resources.
+- **Switching the `GitRepository` ref between branches is a
+  *migration*, not a fresh deploy.** Existing `HelmRelease`s in
+  tenant namespaces upgrade in place to the new branch's chart.
+  Workloads removed from the chart on the new branch (e.g.,
+  `diesel-gen` was removed from `ieee9-grid` on the `dso` branch)
+  disappear cleanly via Helm's normal upgrade reconciliation. CRs of
+  kinds whose `ApplicationDefinition` is removed (e.g., `Ieee9Diesel`
+  when switching `distributed` → `dso`) must be deleted manually
+  *before* the switch, otherwise their `HelmRelease`s become orphans.
+
 ## Quick links
 
 - Reference cluster dashboard: <https://dashboard.cozystack-demo.org>
-- Demo deployment (when running): <https://ieee9.cozystack-demo.org>
+- Demo deployment (when running):
+  - `Ieee9Grid`: <https://ieee9.cozystack-demo.org>
+  - `Ieee9Zone mode=diesel`: <https://diesel.cozystack-demo.org>
+  - `Ieee9Zone mode=dso`: <https://dso.cozystack-demo.org>
+- DSO model repo: <https://github.com/Begonia-UC3/dso-model>
 - GHCR org: <https://github.com/orgs/Begonia-UC3/packages>
 - Upstream pattern: <https://github.com/cozystack/external-apps-example/pull/2>

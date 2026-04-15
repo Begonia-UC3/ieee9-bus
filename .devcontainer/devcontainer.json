@@ -1,0 +1,28 @@
+{
+  "name": "IEEE 9-Bus Grid",
+  "image": "mcr.microsoft.com/devcontainers/base:ubuntu",
+  "features": {
+    "ghcr.io/devcontainers/features/node:1": { "version": "24" },
+    "ghcr.io/devcontainers/features/kubectl-helm-minikube:1": {
+      "kubectl": "latest",
+      "helm": "latest",
+      "minikube": "none"
+    },
+    "ghcr.io/devcontainers/features/github-cli:1": {}
+  },
+  "postCreateCommand": "npm install -g @anthropic-ai/claude-code && mkdir -p ~/.kube && if [ -n \"$KUBECONFIG_DATA\" ]; then echo $KUBECONFIG_DATA | base64 -d > ~/.kube/config; fi",
+  "customizations": {
+    "vscode": {
+      "extensions": ["anthropic.claude-code"]
+    },
+    "codespaces": {
+      "repositories": {
+        "Begonia-UC3/dso-model": {
+          "permissions": {
+            "contents": "write"
+          }
+        }
+      }
+    }
+  }
+}

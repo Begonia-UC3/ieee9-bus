@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>DSO — Distribution System Operator</title>
+  <style>
+    body { font-family: -apple-system, system-ui, sans-serif; background: #0f172a; color: #e2e8f0; margin: 0; padding: 24px; }
+    h1 { margin: 0 0 4px; font-size: 22px; }
+    .sub { color: #94a3b8; font-size: 13px; margin-bottom: 18px; }
+    .card { background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 16px; margin-bottom: 16px; }
+    .card h2 { margin: 0 0 10px; font-size: 14px; text-transform: uppercase; letter-spacing: 0.05em; color: #94a3b8; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
+    th, td { text-align: right; padding: 5px 8px; border-bottom: 1px solid #334155; }
+    th:first-child, td:first-child { text-align: left; }
+    th { color: #94a3b8; font-weight: 500; }
+    .big { font-size: 28px; font-weight: 600; color: #38bdf8; }
+    .tag { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; }
+    .tag.ok { background: #064e3b; color: #6ee7b7; }
+    .tag.err { background: #7f1d1d; color: #fca5a5; }
+    .two { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .k { color: #94a3b8; font-size: 12px; }
+    .v { font-size: 16px; color: #e2e8f0; }
+    code { background: #0f172a; padding: 1px 6px; border-radius: 3px; color: #fbbf24; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <h1>DSO — Distribution System Operator</h1>
+  <div class="sub">Internal Newton–Raphson over a user-supplied grid model; reports aggregate tie flow upstream.</div>
+
+  <div class="two">
+    <div class="card">
+      <h2>External Tie</h2>
+      <div id="tie"></div>
+    </div>
+    <div class="card">
+      <h2>Model</h2>
+      <div id="model-info"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Internal Buses</h2>
+    <table id="buses">
+      <thead>
+        <tr><th>Bus</th><th>Type</th><th>V (pu)</th><th>θ (deg)</th><th>P_net (MW)</th><th>Q_net (MVAR)</th></tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+<script>
+const $ = (sel) => document.querySelector(sel);
+
+function render(state) {
+  if (!state || state.reason) {
+    $("#tie").innerHTML = `<span class="tag err">no model</span> <div class="k" style="margin-top:6px">${state?.reason || state?.error || "…"}</div>`;
+    return;
+  }
+
+  const tie = state.tie_injection || {};
+  const et = state.external_tie || {};
+  const iters = state.iterations;
+  const tag = state.converged ? `<span class="tag ok">converged (${iters} iters)</span>` : `<span class="tag err">diverged</span>`;
+  $("#tie").innerHTML = `
+    ${tag}
+    <div style="margin-top:10px" class="big">${tie.p_mw ?? "—"} MW</div>
+    <div class="k">P at bus ${tie.bus_id} (tie) → reported as <code>${et.asset_id}</code></div>
+    <div class="k" style="margin-top:4px">Q = ${tie.q_mvar ?? "—"} MVAR</div>
+  `;
+
+  const nbus = (state.buses || []).length;
+  $("#model-info").innerHTML = `
+    <div><span class="k">S_base:</span> <span class="v">${state.s_base} MVA</span></div>
+    <div><span class="k">Buses:</span> <span class="v">${nbus}</span></div>
+    <div><span class="k">Slack:</span> <span class="v">bus ${state.slack?.bus_id} (${state.slack?.p_mw} MW)</span></div>
+  `;
+
+  const tbody = $("#buses tbody");
+  tbody.innerHTML = (state.buses || []).map(b => `
+    <tr>
+      <td>${b.id}</td>
+      <td><code>${b.type}</code></td>
+      <td>${b.v_pu}</td>
+      <td>${b.theta_deg}</td>
+      <td>${b.p_net_mw}</td>
+      <td>${b.q_net_mvar}</td>
+    </tr>
+  `).join("");
+}
+
+const ws = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws`);
+ws.onmessage = (e) => { try { render(JSON.parse(e.data)); } catch {} };
+ws.onopen = async () => {
+  const s = await fetch("/api/status").then(r => r.json()).catch(() => null);
+  if (s?.last_solve) render(s.last_solve);
+};
+</script>
+</body>
+</html>

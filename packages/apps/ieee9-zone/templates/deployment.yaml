@@ -1,0 +1,126 @@
+{{- $tag := include "ieee9-zone.imageTag" . -}}
+{{- $img := include "ieee9-zone.imageName" . -}}
+{{- $name := include "ieee9-zone.workloadName" . -}}
+{{- $isDso := eq .Values.mode "dso" -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "ieee9-zone.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicas }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      {{- include "ieee9-zone.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "ieee9-zone.selectorLabels" . | nindent 8 }}
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: {{ $name }}
+          image: "ghcr.io/begonia-uc3/ieee9-bus/{{ $img }}:{{ $tag }}"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8000
+              protocol: TCP
+          env:
+            - name: PYTHONUNBUFFERED
+              value: "1"
+            - name: GRID_CENTRAL_URL
+              value: {{ .Values.gridCentralUrl | quote }}
+            - name: TICK_INTERVAL
+              value: {{ .Values.tickInterval | quote }}
+            {{- if $isDso }}
+            - name: MODEL_PATH
+              value: "/model/current/{{ .Values.modelPath }}"
+            {{- if .Values.assetId }}
+            - name: ASSET_ID
+              value: {{ .Values.assetId | quote }}
+            {{- end }}
+            {{- end }}
+          readinessProbe:
+            httpGet:
+              path: {{ include "ieee9-zone.probePath" . }}
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: {{ include "ieee9-zone.probePath" . }}
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 30
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          resources:
+            requests:
+              cpu: {{ if $isDso }}200m{{ else }}100m{{ end }}
+              memory: {{ if $isDso }}256Mi{{ else }}128Mi{{ end }}
+            limits:
+              cpu: {{ if $isDso }}500m{{ else }}300m{{ end }}
+              memory: {{ if $isDso }}512Mi{{ else }}256Mi{{ end }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            {{- if $isDso }}
+            - name: model
+              mountPath: /model
+              readOnly: true
+            {{- end }}
+        {{- if $isDso }}
+        - name: git-sync
+          image: "registry.k8s.io/git-sync/git-sync:v4.3.0"
+          imagePullPolicy: IfNotPresent
+          args:
+            - "--repo={{ .Values.modelRepoUrl }}"
+            - "--ref={{ .Values.modelRepoBranch }}"
+            - "--period={{ .Values.modelSyncIntervalSeconds }}s"
+            - "--root=/model"
+            - "--link=current"
+            - "--verbose=2"
+          env:
+            - name: GITSYNC_ROOT
+              value: /model
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsUser: 65534
+            runAsGroup: 65534
+            capabilities:
+              drop: [ALL]
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+          volumeMounts:
+            - name: model
+              mountPath: /model
+            - name: tmp
+              mountPath: /tmp
+        {{- end }}
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        {{- if $isDso }}
+        - name: model
+          emptyDir: {}
+        {{- end }}

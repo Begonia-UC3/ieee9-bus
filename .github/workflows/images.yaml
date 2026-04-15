@@ -2,12 +2,13 @@ name: Build & publish images
 
 on:
   push:
-    branches: [main]
+    branches: [main, dso]
     paths:
       - 'grid-central/**'
       - 'diesel-gen/**'
       - 'battery/**'
       - 'datacenter/**'
+      - 'dso/**'
       - '.github/workflows/images.yaml'
     tags:
       - 'v*'
@@ -17,6 +18,7 @@ on:
       - 'diesel-gen/**'
       - 'battery/**'
       - 'datacenter/**'
+      - 'dso/**'
       - '.github/workflows/images.yaml'
   workflow_dispatch:
 
@@ -41,6 +43,7 @@ jobs:
           - diesel-gen
           - battery
           - datacenter
+          - dso
     steps:
       - name: Checkout
         uses: actions/checkout@v4

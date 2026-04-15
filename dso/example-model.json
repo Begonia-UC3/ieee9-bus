@@ -1,0 +1,15 @@
+{
+  "s_base": 100.0,
+  "buses": [
+    {"id": 1, "type": "slack", "v_setpoint": 1.02, "p_gen_mw": 0.0, "q_gen_mvar": 0.0, "p_load_mw": 0.0,  "q_load_mvar": 0.0,  "base_kv": 138.0},
+    {"id": 2, "type": "pq",    "v_setpoint": 1.0,  "p_gen_mw": 0.0, "q_gen_mvar": 0.0, "p_load_mw": 40.0, "q_load_mvar": 15.0, "base_kv": 13.8},
+    {"id": 3, "type": "pq",    "v_setpoint": 1.0,  "p_gen_mw": 0.0, "q_gen_mvar": 0.0, "p_load_mw": 55.0, "q_load_mvar": 20.0, "base_kv": 13.8},
+    {"id": 4, "type": "pq",    "v_setpoint": 1.0,  "p_gen_mw": 0.0, "q_gen_mvar": 0.0, "p_load_mw": 30.0, "q_load_mvar": 12.0, "base_kv": 13.8}
+  ],
+  "branches": [
+    {"from": 1, "to": 2, "r_pu": 0.01, "x_pu": 0.08, "b_pu": 0.10, "rate_mva": 150, "is_transformer": true},
+    {"from": 2, "to": 3, "r_pu": 0.02, "x_pu": 0.10, "b_pu": 0.15, "rate_mva": 100, "is_transformer": false},
+    {"from": 2, "to": 4, "r_pu": 0.02, "x_pu": 0.12, "b_pu": 0.12, "rate_mva": 100, "is_transformer": false}
+  ],
+  "external_tie": {"bus_id": 1, "asset_id": "datacenter"}
+}

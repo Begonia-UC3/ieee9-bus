@@ -1,0 +1,37 @@
+{{- if .Values.ingressEnabled }}
+{{- $name := include "ieee9-zone.workloadName" . -}}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ .Release.Name }}
+  labels:
+    {{- include "ieee9-zone.labels" . | nindent 4 }}
+  {{- if .Values.tlsEnabled }}
+  annotations:
+    cert-manager.io/cluster-issuer: {{ .Values.tlsClusterIssuer | quote }}
+    {{- with .Values.ingressClassName }}
+    acme.cert-manager.io/http01-ingress-class: {{ . | quote }}
+    {{- end }}
+  {{- end }}
+spec:
+  {{- with .Values.ingressClassName }}
+  ingressClassName: {{ . }}
+  {{- end }}
+  {{- if .Values.tlsEnabled }}
+  tls:
+    - hosts:
+        - {{ .Values.ingressHost | quote }}
+      secretName: {{ .Release.Name }}-tls
+  {{- end }}
+  rules:
+    - host: {{ .Values.ingressHost | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $name }}
+                port:
+                  name: http
+{{- end }}

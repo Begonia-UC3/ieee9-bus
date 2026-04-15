@@ -52,6 +52,23 @@ services:
     networks: [grid-net]
     restart: unless-stopped
 
+  dso:
+    build:
+      context: ../dso
+      dockerfile: Containerfile
+    ports:
+      - "8004:8000"
+    environment:
+      GRID_CENTRAL_URL: http://grid-central:8000
+      TICK_INTERVAL: "1.0"
+      MODEL_PATH: /model/model.json
+      PYTHONUNBUFFERED: "1"
+    volumes:
+      - ../dso/example-model.json:/model/model.json:ro
+    depends_on: [grid-central]
+    networks: [grid-net]
+    restart: unless-stopped
+
 networks:
   grid-net:
     driver: bridge

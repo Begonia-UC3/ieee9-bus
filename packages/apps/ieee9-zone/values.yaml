@@ -1,0 +1,56 @@
+## @section Mode
+
+## @param {string} mode="diesel" - Zone type. One of: diesel, battery, datacenter, dso.
+mode: "diesel"
+
+## @section Image
+
+## @param {string} imageTag="" - Override image tag. Defaults to the chart appVersion.
+imageTag: ""
+
+## @section Workload
+
+## @param {int} replicas=1 - Replica count.
+replicas: 1
+
+## @section Wiring
+
+## @param {string} gridCentralUrl="http://grid-central:8000" - Base URL of upstream grid-central (in-namespace by default).
+gridCentralUrl: "http://grid-central:8000"
+
+## @param {string} tickInterval="1.0" - Seconds between telemetry ticks.
+tickInterval: "1.0"
+
+## @section DSO model (only used when mode=dso)
+
+## @param {string} modelRepoUrl="" - HTTPS URL of a public Git repo containing the DSO grid model JSON.
+modelRepoUrl: ""
+
+## @param {string} modelRepoBranch="main" - Branch to track for the model repo.
+modelRepoBranch: "main"
+
+## @param {string} modelPath="model.json" - Path to the model JSON inside the repo.
+modelPath: "model.json"
+
+## @param {int} modelSyncIntervalSeconds=30 - Poll interval for git-sync.
+modelSyncIntervalSeconds: 30
+
+## @param {string} assetId="" - Override the external-tie asset_id (defaults to value from model JSON).
+assetId: ""
+
+## @section Ingress
+
+## @param {boolean} ingressEnabled=false - Expose the zone HTTP UI via Ingress.
+ingressEnabled: false
+
+## @param {string} ingressHost="zone.example.com" - Ingress host when enabled.
+ingressHost: "zone.example.com"
+
+## @param {string} ingressClassName="" - Optional IngressClass name.
+ingressClassName: ""
+
+## @param {boolean} tlsEnabled=true - Issue an LE certificate via cert-manager when ingress is enabled.
+tlsEnabled: true
+
+## @param {string} tlsClusterIssuer="letsencrypt-prod" - cert-manager ClusterIssuer used for the certificate.
+tlsClusterIssuer: "letsencrypt-prod"

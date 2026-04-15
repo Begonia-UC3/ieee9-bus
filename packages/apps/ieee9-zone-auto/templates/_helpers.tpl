@@ -63,12 +63,14 @@ Asset id reported upstream: "dso-N".
 {{- end }}
 
 {{/*
-Target namespace for the deployed DSO: tenant-dso-N (provisioned by
-Cozystack from the Tenant CR).
+Target namespace for the deployed DSO: tenant-dsoN (provisioned by
+Cozystack from the Tenant CR). Name contains no dashes after the
+"tenant-" prefix — Cozystack's Tenant chart rejects multi-dash
+release names.
 */}}
 {{- define "ieee9ZoneAuto.namespace" -}}
 {{- $n := include "ieee9ZoneAuto.instanceNumber" . -}}
-{{- printf "tenant-dso-%s" $n -}}
+{{- printf "tenant-dso%s" $n -}}
 {{- end }}
 
 {{/*
@@ -81,11 +83,14 @@ bootstrap Job live.
 
 {{/*
 Short name of the DSO's own Tenant CR. Cozystack renders this into
-namespace `tenant-dso-N`.
+namespace `tenant-dsoN` and an underlying HelmRelease of the same
+name — that HR's release name must NOT contain dashes beyond the
+`tenant-` prefix (Cozystack's tenant chart enforces this), so we use
+`dsoN` rather than `dso-N`.
 */}}
 {{- define "ieee9ZoneAuto.tenantName" -}}
 {{- $n := include "ieee9ZoneAuto.instanceNumber" . -}}
-{{- printf "dso-%s" $n -}}
+{{- printf "dso%s" $n -}}
 {{- end }}
 
 {{/*

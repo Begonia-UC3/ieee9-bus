@@ -17,15 +17,21 @@ metadata:
 spec: {}
 ---
 {{- end }}
-# Per-DSO child tenant. Cozystack provisions namespace `tenant-dso-N`
-# from this CR. Regular (non-hook) Helm resource so `helm uninstall`
-# deletes the Tenant, which triggers Cozystack to tear down the
-# namespace and everything in it.
+# Per-DSO child tenant. Must exist BEFORE the pre-install bootstrap Job
+# runs (the Job waits for the namespace Cozystack provisions from this
+# CR). Made a pre-install hook with a weight lower than the RBAC/Job
+# hooks so it applies first. `resource-policy: keep` prevents Helm from
+# deleting the Tenant on uninstall — tear it down manually (or via a
+# future post-delete hook).
 apiVersion: apps.cozystack.io/v1alpha1
 kind: Tenant
 metadata:
   name: {{ $tenantName }}
   namespace: {{ $parentNs }}
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-20"
+    "helm.sh/resource-policy": keep
   labels:
     ieee9-zone-auto/owner: {{ include "ieee9ZoneAuto.owner" . | quote }}
     {{- include "ieee9ZoneAuto.labels" . | nindent 4 }}

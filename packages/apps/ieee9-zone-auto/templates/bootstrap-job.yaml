@@ -28,7 +28,7 @@ spec:
       restartPolicy: Never
       containers:
         - name: copy
-          image: bitnami/kubectl:1.30
+          image: rancher/kubectl:v1.30.3
           command: ["/bin/sh", "-c"]
           args:
             - |

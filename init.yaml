@@ -27,3 +27,4 @@ spec:
         name: ieee9-bus
         namespace: cozy-public
       version: '*'
+      reconcileStrategy: Revision

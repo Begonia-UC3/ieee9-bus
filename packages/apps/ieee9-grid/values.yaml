@@ -24,3 +24,15 @@ tlsEnabled: true
 
 ## @param {string} tlsClusterIssuer="letsencrypt-prod" - cert-manager ClusterIssuer used for the certificate.
 tlsClusterIssuer: "letsencrypt-prod"
+
+## @param {boolean} batteryIngressEnabled=false - Expose battery UI via Ingress.
+batteryIngressEnabled: false
+
+## @param {string} batteryIngressHost="battery.example.com" - Ingress host for battery when enabled.
+batteryIngressHost: "battery.example.com"
+
+## @param {boolean} datacenterIngressEnabled=false - Expose datacenter UI via Ingress.
+datacenterIngressEnabled: false
+
+## @param {string} datacenterIngressHost="datacenter.example.com" - Ingress host for datacenter when enabled.
+datacenterIngressHost: "datacenter.example.com"

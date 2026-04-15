@@ -37,6 +37,26 @@
       "description": "cert-manager ClusterIssuer used for the certificate.",
       "type": "string",
       "default": "letsencrypt-prod"
+    },
+    "batteryIngressEnabled": {
+      "description": "Expose battery UI via Ingress.",
+      "type": "boolean",
+      "default": false
+    },
+    "batteryIngressHost": {
+      "description": "Ingress host for battery when enabled.",
+      "type": "string",
+      "default": "battery.example.com"
+    },
+    "datacenterIngressEnabled": {
+      "description": "Expose datacenter UI via Ingress.",
+      "type": "boolean",
+      "default": false
+    },
+    "datacenterIngressHost": {
+      "description": "Ingress host for datacenter when enabled.",
+      "type": "string",
+      "default": "datacenter.example.com"
     }
   },
   "allOf": [
@@ -48,6 +68,26 @@
       "then": {
         "properties": { "ingressHost": { "minLength": 1 } },
         "required": ["ingressHost"]
+      }
+    },
+    {
+      "if": {
+        "properties": { "batteryIngressEnabled": { "const": true } },
+        "required": ["batteryIngressEnabled"]
+      },
+      "then": {
+        "properties": { "batteryIngressHost": { "minLength": 1 } },
+        "required": ["batteryIngressHost"]
+      }
+    },
+    {
+      "if": {
+        "properties": { "datacenterIngressEnabled": { "const": true } },
+        "required": ["datacenterIngressEnabled"]
+      },
+      "then": {
+        "properties": { "datacenterIngressHost": { "minLength": 1 } },
+        "required": ["datacenterIngressHost"]
       }
     }
   ]

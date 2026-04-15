@@ -246,6 +246,28 @@ class DSOEngine:
         tie_P = P_calc[tie_idx] * self.s_base
         tie_Q = Q_calc[tie_idx] * self.s_base
 
+        # Per-branch flows (P, Q at each end), MW/MVAR.
+        branches_out = []
+        for br in self.model.get("branches", []):
+            i = self.bus_index.get(br["from"])
+            j = self.bus_index.get(br["to"])
+            if i is None or j is None:
+                continue
+            yij = -self.Y[i, j]  # series admittance (off-diagonal sign)
+            g, b = yij.real, yij.imag
+            dt = theta[i] - theta[j]
+            # P_ij = V_i² g - V_i V_j (g cos δ + b sin δ)
+            p_ij = V[i] ** 2 * g - V[i] * V[j] * (g * math.cos(dt) + b * math.sin(dt))
+            q_ij = -V[i] ** 2 * b - V[i] * V[j] * (g * math.sin(dt) - b * math.cos(dt))
+            branches_out.append({
+                "from": br["from"],
+                "to": br["to"],
+                "p_mw": round(p_ij * self.s_base, 2),
+                "q_mvar": round(q_ij * self.s_base, 2),
+                "rate_mva": br.get("rate_mva"),
+                "is_transformer": bool(br.get("is_transformer", False)),
+            })
+
         self.last_solve = {
             "converged": converged,
             "iterations": iters,
@@ -267,6 +289,7 @@ class DSOEngine:
                 }
                 for i in range(self.n)
             ],
+            "branches": branches_out,
             "slack": {"bus_id": self.bus_ids[slack], "p_mw": round(slack_P, 3), "q_mvar": round(slack_Q, 3)},
             "timestamp": time.time(),
         }

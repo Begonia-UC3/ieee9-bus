@@ -21,6 +21,24 @@
     .k { color: #94a3b8; font-size: 12px; }
     .v { font-size: 16px; color: #e2e8f0; }
     code { background: #0f172a; padding: 1px 6px; border-radius: 3px; color: #fbbf24; font-size: 12px; }
+    svg { display: block; width: 100%; height: 460px; background: #0f172a; border-radius: 6px; }
+    .bus-circle { stroke-width: 2; }
+    .bus-slack { fill: #064e3b; stroke: #6ee7b7; }
+    .bus-pv    { fill: #1e3a8a; stroke: #93c5fd; }
+    .bus-pq    { fill: #422006; stroke: #fbbf24; }
+    .bus-label { fill: #e2e8f0; font-size: 12px; font-weight: 600; text-anchor: middle; }
+    .bus-vinfo { fill: #94a3b8; font-size: 10px; text-anchor: middle; }
+    .branch-line { stroke: #475569; fill: none; }
+    .branch-active { stroke: #38bdf8; }
+    .branch-overload { stroke: #f87171; }
+    .branch-label { fill: #cbd5e1; font-size: 10px; font-weight: 600; text-anchor: middle; pointer-events: none; }
+    .branch-label-bg { fill: #0f172a; stroke: #334155; }
+    .arrowhead { fill: #38bdf8; }
+    .arrowhead-overload { fill: #f87171; }
+    .tie-marker { fill: #fbbf24; stroke: #fde68a; stroke-width: 2; }
+    .legend { font-size: 11px; color: #94a3b8; margin-top: 6px; }
+    .legend span { display: inline-block; margin-right: 14px; }
+    .legend i { display: inline-block; width: 10px; height: 10px; vertical-align: middle; margin-right: 4px; border-radius: 50%; border: 1.5px solid; }
   </style>
 </head>
 <body>
@@ -39,6 +57,19 @@
   </div>
 
   <div class="card">
+    <h2>Power-flow diagram</h2>
+    <svg id="diagram" viewBox="0 0 900 460" preserveAspectRatio="xMidYMid meet"></svg>
+    <div class="legend">
+      <span><i style="background:#064e3b;border-color:#6ee7b7"></i>slack</span>
+      <span><i style="background:#1e3a8a;border-color:#93c5fd"></i>PV</span>
+      <span><i style="background:#422006;border-color:#fbbf24"></i>PQ</span>
+      <span style="color:#fbbf24">★ external tie</span>
+      <span style="color:#38bdf8">— line thickness ∝ |P|, arrow = P direction</span>
+      <span style="color:#f87171">— red = ≥80% rated</span>
+    </div>
+  </div>
+
+  <div class="card">
     <h2>Internal Buses</h2>
     <table id="buses">
       <thead>
@@ -50,10 +81,134 @@
 
 <script>
 const $ = (sel) => document.querySelector(sel);
+const NS = "http://www.w3.org/2000/svg";
+
+function el(name, attrs = {}, text = null) {
+  const e = document.createElementNS(NS, name);
+  for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
+  if (text != null) e.textContent = text;
+  return e;
+}
+
+function layoutCircle(busIds, cx, cy, r) {
+  // Bus 0 at top, going clockwise.
+  const n = busIds.length;
+  const pos = {};
+  for (let i = 0; i < n; i++) {
+    const a = -Math.PI / 2 + (2 * Math.PI * i) / n;
+    pos[busIds[i]] = { x: cx + r * Math.cos(a), y: cy + r * Math.sin(a) };
+  }
+  return pos;
+}
+
+function renderDiagram(state) {
+  const svg = $("#diagram");
+  svg.innerHTML = "";
+  if (!state || !state.buses) return;
+
+  const buses = state.buses;
+  const branches = state.branches || [];
+  const tieBusId = state.external_tie?.bus_id;
+
+  const W = 900, H = 460;
+  const cx = W / 2, cy = H / 2;
+  const r = Math.min(W, H) * 0.32;
+  const pos = layoutCircle(buses.map(b => b.id), cx, cy, r);
+
+  // Compute max |P_branch| for thickness scaling
+  const maxP = Math.max(1, ...branches.map(b => Math.abs(b.p_mw)));
+
+  // Define arrowhead markers (one per color)
+  const defs = el("defs");
+  for (const [id, cls] of [["arrow", "arrowhead"], ["arrow-ol", "arrowhead-overload"]]) {
+    const m = el("marker", {
+      id, viewBox: "0 0 10 10", refX: "8", refY: "5",
+      markerWidth: "8", markerHeight: "8", orient: "auto-start-reverse"
+    });
+    m.appendChild(el("path", { d: "M 0 0 L 10 5 L 0 10 z", class: cls }));
+    defs.appendChild(m);
+  }
+  svg.appendChild(defs);
+
+  // Branches
+  for (const br of branches) {
+    const a = pos[br.from], b = pos[br.to];
+    if (!a || !b) continue;
+    const reverse = br.p_mw < 0;
+    const fromPos = reverse ? b : a;
+    const toPos = reverse ? a : b;
+    const absP = Math.abs(br.p_mw);
+    const loadPct = br.rate_mva ? (Math.sqrt(br.p_mw ** 2 + br.q_mvar ** 2) / br.rate_mva) * 100 : 0;
+    const overload = loadPct >= 80;
+    const thickness = 1 + (absP / maxP) * 6;
+
+    // Shorten line so arrow doesn't overlap bus circle
+    const dx = toPos.x - fromPos.x, dy = toPos.y - fromPos.y;
+    const len = Math.hypot(dx, dy);
+    const ux = dx / len, uy = dy / len;
+    const margin = 26;
+    const x1 = fromPos.x + ux * margin, y1 = fromPos.y + uy * margin;
+    const x2 = toPos.x - ux * margin, y2 = toPos.y - uy * margin;
+
+    const cls = "branch-line " + (overload ? "branch-overload" : (absP > 0.1 ? "branch-active" : ""));
+    const line = el("line", {
+      x1, y1, x2, y2,
+      class: cls,
+      "stroke-width": thickness,
+      "marker-end": "url(" + (overload ? "#arrow-ol" : "#arrow") + ")",
+    });
+    svg.appendChild(line);
+
+    // Branch label (P value at midpoint, slightly offset perpendicular)
+    const mx = (x1 + x2) / 2, my = (y1 + y2) / 2;
+    const px = -uy * 12, py = ux * 12;
+    const labelText = absP.toFixed(1) + " MW";
+    const tw = labelText.length * 6 + 6;
+    svg.appendChild(el("rect", {
+      x: mx + px - tw / 2, y: my + py - 8,
+      width: tw, height: 14, rx: 3,
+      class: "branch-label-bg"
+    }));
+    svg.appendChild(el("text", {
+      x: mx + px, y: my + py + 3,
+      class: "branch-label"
+    }, labelText));
+  }
+
+  // Buses
+  for (const bus of buses) {
+    const p = pos[bus.id];
+    if (!p) continue;
+    const cls = "bus-circle bus-" + bus.type;
+    svg.appendChild(el("circle", { cx: p.x, cy: p.y, r: 22, class: cls }));
+    svg.appendChild(el("text", { x: p.x, y: p.y - 1, class: "bus-label" }, "Bus " + bus.id));
+    svg.appendChild(el("text", { x: p.x, y: p.y + 12, class: "bus-vinfo" }, bus.v_pu.toFixed(3) + " pu"));
+
+    // Net injection label below bus
+    if (Math.abs(bus.p_net_mw) > 0.01) {
+      const sign = bus.p_net_mw > 0 ? "+" : "";
+      svg.appendChild(el("text", {
+        x: p.x, y: p.y + 38,
+        class: "bus-vinfo",
+        "text-anchor": "middle"
+      }, sign + bus.p_net_mw.toFixed(1) + " MW"));
+    }
+
+    // Tie marker
+    if (bus.id === tieBusId) {
+      svg.appendChild(el("text", {
+        x: p.x + 26, y: p.y - 18,
+        class: "tie-marker",
+        "font-size": "20"
+      }, "★"));
+    }
+  }
+}
 
 function render(state) {
   if (!state || state.reason) {
     $("#tie").innerHTML = `<span class="tag err">no model</span> <div class="k" style="margin-top:6px">${state?.reason || state?.error || "…"}</div>`;
+    $("#diagram").innerHTML = "";
     return;
   }
 
@@ -69,9 +224,10 @@ function render(state) {
   `;
 
   const nbus = (state.buses || []).length;
+  const nbr = (state.branches || []).length;
   $("#model-info").innerHTML = `
     <div><span class="k">S_base:</span> <span class="v">${state.s_base} MVA</span></div>
-    <div><span class="k">Buses:</span> <span class="v">${nbus}</span></div>
+    <div><span class="k">Buses:</span> <span class="v">${nbus}</span> &nbsp; <span class="k">Branches:</span> <span class="v">${nbr}</span></div>
     <div><span class="k">Slack:</span> <span class="v">bus ${state.slack?.bus_id} (${state.slack?.p_mw} MW)</span></div>
   `;
 
@@ -86,6 +242,8 @@ function render(state) {
       <td>${b.q_net_mvar}</td>
     </tr>
   `).join("");
+
+  renderDiagram(state);
 }
 
 const ws = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws`);

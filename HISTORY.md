@@ -184,7 +184,22 @@ and `dso-8` fresh with age < 2 s; buses 7 and 8 on
 new ASSET_BUS_MAP needed the bump); battery / datacenter /
 diesel-gen / dso — RESTARTS delta 0.
 
-The cross-tenant CNP pair added in phase 6 was **not** changed:
-its endpointSelector already matches *any* pod labelled
-`app.kubernetes.io/name: dso` in `tenant-dsos`, which remains true
-after the workload-rename refactor.
+**CNP selector migration (caught during test).** The cross-tenant
+CNP pair from phase 6 was originally selecting
+`app.kubernetes.io/name: dso`, which after the workload-rename
+refactor varies per-instance (`dso-bus8`, `dso-bus7`). Updated
+both CNPs to match on the Cozystack-provided pod label
+`apps.cozystack.io/application.kind: Ieee9Zone` — stable across
+the rename, and in `tenant-dsos` equivalent to "all DSOs" since no
+diesel lives there. Documented in `deploy/stage2/cnp-cross-tenant.yaml`.
+
+**Observed physical limit at three co-deployed DSOs.** With three
+`Ieee9Zone mode: dso` instances (bus 6 / 7 / 8) all pulling the
+same 168 MW aggregate feeder from `Begonia-UC3/dso-model` main,
+total IEEE-9 transmission load (~575 MW) exceeds available
+generation headroom and grid-central reports
+`converged: false iter: 20` with bus voltages depressed to
+~0.85-0.93 pu. Not a chart regression — pure physics. For a
+production-ish 3+ DSO setup, each operator would bring a smaller
+feeder model; the mechanism (distinct workloads, routed overrides,
+closed-loop feedback per bus) is validated regardless.

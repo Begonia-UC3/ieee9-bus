@@ -15,6 +15,13 @@
 # the `ieee9-zone` chart if a second cross-tenant DSO ever lands
 # (dso-4/7/9).
 ---
+# Selector choice: apps.cozystack.io/application.kind=Ieee9Zone.
+# This label is set by Cozystack on every Ieee9Zone pod and survives
+# the workload-name refactor on the `dso-multi` branch (where the
+# app.kubernetes.io/name label varies per-instance: dso-bus8,
+# dso-bus7, etc.). In tenant-dsos we only run DSOs, so matching all
+# Ieee9Zone pods here is equivalent to matching all DSOs. If a
+# diesel Ieee9Zone ever arrives in tenant-dsos, tighten then.
 apiVersion: cilium.io/v2
 kind: CiliumNetworkPolicy
 metadata:
@@ -23,7 +30,7 @@ metadata:
 spec:
   endpointSelector:
     matchLabels:
-      app.kubernetes.io/name: dso
+      apps.cozystack.io/application.kind: Ieee9Zone
   egress:
   - toEndpoints:
     - matchLabels:
@@ -47,7 +54,7 @@ spec:
   - fromEndpoints:
     - matchLabels:
         k8s:io.kubernetes.pod.namespace: tenant-dsos
-        app.kubernetes.io/name: dso
+        apps.cozystack.io/application.kind: Ieee9Zone
     toPorts:
     - ports:
       - port: "8000"

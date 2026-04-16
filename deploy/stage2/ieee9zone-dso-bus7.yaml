@@ -11,10 +11,12 @@ metadata:
   namespace: tenant-dsos
 spec:
   mode: dso
-  # Pin to immutable sha-<short> on dso-multi HEAD to bypass kubelet's
-  # IfNotPresent cache (CLAUDE.md behavioural gotcha — the `:dso-multi`
-  # tag gets a new digest on every push to the branch).
-  imageTag: sha-REPLACE_AT_APPLY_TIME
+  # Pin to immutable sha-<short> to bypass kubelet's IfNotPresent
+  # cache (CLAUDE.md behavioural gotcha). Uses the same dso-image sha
+  # as Ieee9Zone/dso-bus8 — the dso Python code didn't change on
+  # dso-multi (only grid-central did), so sharing the dso image
+  # across both instances is intentional.
+  imageTag: sha-73d2ca7
 
   modelRepoUrl: https://github.com/Begonia-UC3/dso-model.git
   modelRepoBranch: main

@@ -15,7 +15,7 @@ TSO ring (IEEE-9 transmission, grid-central)
 ┌────────────┐  ┌────────────┐  ┌────────────┐  ┌────────────┐
 │ diesel-gen │  │   battery  │  │ datacenter │  │    dso     │
 │ Bus 2, PV  │  │ Bus 3, PV± │  │ Bus 5, PQ  │  │ Bus 6, PQ  │
-│  163 MW    │  │   85 MW    │  │  125 MW    │  │  (tie) ↓   │
+│  500 MW    │  │   85 MW    │  │  125 MW    │  │  (tie) ↓   │
 └─────┬──────┘  └─────┬──────┘  └─────┬──────┘  └─────┬──────┘
       │  POST /api/asset-update every tick            │
       └───────┬──────────┬────────┬───────────────────┘
@@ -41,7 +41,7 @@ own Cozystack tenant.
 | Asset / role       | Bus | Type       | Rated      | Cozystack CR                           |
 | ------------------ | --- | ---------- | ---------- | -------------------------------------- |
 | slack generator    |  1  | Slack      | balancing  | inside `Ieee9Grid`                     |
-| diesel-gen         |  2  | PV (gen)   |   163 MW   | `Ieee9Zone mode=diesel`                |
+| diesel-gen         |  2  | PV (gen)   |   500 MW   | `Ieee9Zone mode=diesel` (uprated from 163 MW for multi-DSO headroom) |
 | battery            |  3  | PV (±gen)  |    85 MW   | inside `Ieee9Grid`                     |
 | datacenter         |  5  | PQ (load)  |   125 MW   | inside `Ieee9Grid`                     |
 | dso (primary)      |  6  | PQ (load)  | tie        | `Ieee9Zone mode=dso` (tenant-root)     |

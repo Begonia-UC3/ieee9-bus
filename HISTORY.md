@@ -231,3 +231,54 @@ criteria and gotchas surfaced during the run are logged in
 (`docs/newton-raphson.md`, `docs/topology.md`,
 `docs/multitenant.md`) fan out the physics and architecture that
 don't belong in the project README.
+
+## Phase 8 — `classroom` branch: four student tenants, 4th DSO breaks NR
+
+Forked from `dso-multi`. Turns the click-deploy mechanism into a
+teaching tool: four student groups each get their own Cozystack
+tenant (`tenant-group1..tenant-group4`), each clicks their own
+`Ieee9Zone mode=dso` through the shared dashboard (one URL,
+Keycloak-gated per-tenant view), and the IEEE-9 transmission grid
+is tuned so that the **4th** concurrent student DSO pushes at
+least one bus voltage below the NR clamp — `converged: false`
+becomes an explicit teaching signal rather than a bug.
+
+Tuning knob: `grid-central/main.py` V-clamp tightened back from
+`dso-multi`'s widened 0.80 → 0.85. The `dso-multi` diesel uprate
+(500 MW) is kept: with 4 DSOs at ~180 MW each plus the base-case
+load, slack picks up ~550 MW and voltages should drop through
+0.85 on at least one of the 230-kV ring buses.
+
+Cluster footprint (`deploy/classroom/`):
+
+- `tenants.yaml` — four Tenant CRs, siblings of `tenant-dsos`
+  under `tenant-root`. Namespaces `tenant-group1..4` provisioned
+  by Cozystack, reuse tenant-root's ingress controller.
+- `cnps.yaml` — four egress CNPs (one per student tenant, scoped
+  to the tenant's own namespace per Cilium rules) + one ingress
+  CNP in `tenant-root` accepting from all four tenants. Selector
+  on all sides is the stable `apps.cozystack.io/application.kind:
+  Ieee9Zone` label, so adding/removing student DSOs costs
+  nothing — any new `Ieee9Zone` in a student tenant is covered
+  automatically.
+- `README.md` — operator runbook (apply order: tenants → CNPs →
+  delete-existing-DSOs + grid-central restart → Flux switch →
+  bump Ieee9Grid imageTag → Keycloak/RBAC).
+
+Clean slate on classroom deploy: `tenant-root/dso` (primary DSO
+on bus 6) deleted so students see the IEEE-9 ring starting from
+base-case loads, not pre-loaded. `tenant-dsos` kept as a
+non-classroom sandbox — existing `dso-bus7` and `dso-bus8`
+deleted, the tenant itself stays.
+
+Operator (not repo-side) prerequisites: four Keycloak users (one
+per group) + Cozystack `Tenant → owner` bindings. Shared dashboard
+URL, per-tenant filtered view — the Cozystack default.
+
+Per-group form values + pass criteria + calibration iteration log
+live in [`tests/T-002-classroom.md`](tests/README.md).
+
+**Known unknown at branch-up time:** the 0.85 clamp starting point
+is theoretical. Expected to need 1–2 empirical passes to settle
+exactly (tighten to 0.87 if 4 DSOs still converge, widen to 0.83
+if 3 already break). Iteration trail captured in T-002.

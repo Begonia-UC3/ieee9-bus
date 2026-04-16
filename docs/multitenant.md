@@ -140,6 +140,33 @@ the "one cluster, one install" cadence.
 Once applied, the CNPs cover every present and future DSO in
 `tenant-dsos` — no per-DSO CNP needed.
 
+## Classroom mode (branch `classroom`)
+
+When four student groups each need an isolated tenant, the same
+pattern scales linearly: four `Tenant` CRs
+(`tenant-group1..tenant-group4`), four egress CNPs (one per
+student namespace), and **one** ingress CNP in `tenant-root` that
+accepts from all four. Cilium can't OR `endpointSelector` across
+namespaces, so egress must be per-namespace; ingress happily takes
+an array of `fromEndpoints` with one per source tenant.
+
+Manifests: [`../deploy/classroom/tenants.yaml`](../deploy/classroom/tenants.yaml)
++ [`../deploy/classroom/cnps.yaml`](../deploy/classroom/cnps.yaml).
+Full operator runbook (apply order, Keycloak prerequisites,
+Flux switch, calibration): [`../deploy/classroom/README.md`](../deploy/classroom/README.md).
+
+On the physics side, the classroom branch tightens the NR V clamp
+back to `[0.85, 1.15]` so that the 4th concurrent student DSO
+pushes at least one bus below the threshold and NR reports
+`converged: false` — an intentional teaching moment rather than a
+stability bug.
+
+Authentication for the four groups: **single shared dashboard
+URL**, Keycloak-backed per-user auth, Cozystack RBAC binds each
+user to exactly one tenant. Students see only their own tenant on
+login. Separate per-group ingresses are not needed — and actively
+discouraged, since they'd bypass Cozystack's RBAC model.
+
 ## What click-deploy does *not* do
 
 Deliberately out of scope (the abandoned `dso-auto` attempt tried

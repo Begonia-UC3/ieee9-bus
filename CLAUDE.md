@@ -51,13 +51,18 @@ Side branches forked from `dso`:
   1+2 on this branch brought up a single manual `Ieee9Zone mode:
   dso` on outer bus 8 in `tenant-dsos`, closed-loop. Superseded by
   `dso-multi`; kept for history.
-- `dso-multi` — **current Flux target**. Generalises the
-  `dso-bus8` work: multiple `Ieee9Zone mode: dso` instances can
-  coexist in the same tenant namespace (workload name is now
-  instance-scoped for `mode=dso`), `upstreamBusId` is a dashboard
-  dropdown over the IEEE-9 PQ buses, and `grid-central`'s
-  `ASSET_BUS_MAP` pre-declares `dso-4/7/8/9` so no image rebuild
-  is needed per new DSO.
+- `dso-multi` — generalises `dso-bus8`: multiple `Ieee9Zone mode:
+  dso` in one tenant (workload name instance-scoped), `upstreamBusId`
+  dropdown, `ASSET_BUS_MAP` pre-declares `dso-4/7/8/9`. Kept as
+  stable fallback.
+- `classroom` — **current Flux target**. Forked from `dso-multi`.
+  Adds four isolated student tenants
+  (`tenant-group1..tenant-group4`), cross-tenant CNPs per tenant,
+  and V-clamp tightened back to 0.85 so that the 4th student DSO
+  deliberately fails Newton–Raphson — an explicit teaching signal
+  about grid stability. See [`deploy/classroom/README.md`](deploy/classroom/README.md)
+  for the operator runbook and [`tests/T-002-classroom.md`](tests/T-002-classroom.md)
+  for the per-group form values.
 - `dso-auto-archive` — a click-deploy `Ieee9ZoneAuto` kind
   (auto-allocated slot, child Cozystack `Tenant`, GitHub repo
   auto-create) that was prototyped but not shipped — the install
@@ -648,13 +653,13 @@ dashboard.
   loop in `grid-central/main.py:solve()` compute
   `S_inj = V_1 · conj(Y_1k · V_k)` and write to
   `self.P_gen[0]` / `self.Q_gen[0]`.
-- **NR V clamp is 0.80–1.15 pu.** Widened from the original 0.85–1.15
-  because 3+ co-deployed DSOs can push physically-valid bus
-  voltages below 0.85; clamping at 0.85 blocks NR from finding the
-  true solution (Jacobian update gets the wrong derivative,
-  iterations max out). 0.80 is the grid-collapse threshold — if a
-  bus genuinely hits it, the dashboard flags it
-  `status=undervoltage`.
+- **NR V clamp depends on the branch.** `dso-multi` sets it at
+  `[0.80, 1.15]` to accommodate 3+ co-deployed DSOs.
+  **`classroom` tightens back to `[0.85, 1.15]`** on purpose — we
+  want the 4th student DSO to push at least one bus below the
+  clamp and trigger explicit non-convergence (teaching signal).
+  If `converged: false iter: 20` shows up on `classroom` after
+  four student DSOs, that's the expected outcome, not a bug.
 - **Diesel-gen rated at 500 MW (uprated from 163).** Gives enough
   local generation (AUTO_MODE walks 325-450 MW) to keep the IEEE-9
   ring stable with 3 full-size DSOs. Comfortably converges at 3

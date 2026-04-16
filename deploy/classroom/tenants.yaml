@@ -1,0 +1,62 @@
+# Four student tenants for the classroom exercise.
+# Siblings of `tenant-dsos` under tenant-root. Each will provision a
+# namespace `tenant-group<N>` plus the standard Cozystack CNP bundle
+# and a per-tenant Flux ServiceAccount.
+#
+# Apply once per cluster:
+#   kubectl apply -f tenants.yaml
+#
+# Tenant names CANNOT contain dashes (Cozystack platform gotcha #2).
+# `group1` is fine, `group-1` would be rejected at HelmRelease creation.
+---
+apiVersion: apps.cozystack.io/v1alpha1
+kind: Tenant
+metadata:
+  name: group1
+  namespace: tenant-root
+spec:
+  etcd: false
+  host: ""
+  ingress: false                 # reuses tenant-root's ingress controller
+  monitoring: true
+  resourceQuotas: {}
+  seaweedfs: false
+---
+apiVersion: apps.cozystack.io/v1alpha1
+kind: Tenant
+metadata:
+  name: group2
+  namespace: tenant-root
+spec:
+  etcd: false
+  host: ""
+  ingress: false
+  monitoring: true
+  resourceQuotas: {}
+  seaweedfs: false
+---
+apiVersion: apps.cozystack.io/v1alpha1
+kind: Tenant
+metadata:
+  name: group3
+  namespace: tenant-root
+spec:
+  etcd: false
+  host: ""
+  ingress: false
+  monitoring: true
+  resourceQuotas: {}
+  seaweedfs: false
+---
+apiVersion: apps.cozystack.io/v1alpha1
+kind: Tenant
+metadata:
+  name: group4
+  namespace: tenant-root
+spec:
+  etcd: false
+  host: ""
+  ingress: false
+  monitoring: true
+  resourceQuotas: {}
+  seaweedfs: false

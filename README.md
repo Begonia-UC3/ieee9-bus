@@ -84,11 +84,17 @@ Each service ships a `Containerfile` and `requirements.txt`.
 - **`dso-bus8`** — first iteration of the second-DSO pattern (one
   manual DSO on bus 8 in `tenant-dsos`). Superseded by `dso-multi`;
   retained for history.
-- **`dso-multi`** — **live branch on the reference cluster** (Flux
-  `GitRepository` tracks it). Multi-DSO per tenant namespace
-  (instance-scoped workload names for `mode=dso`), dashboard
-  dropdown for `upstreamBusId`, and `ASSET_BUS_MAP` pre-populated
-  with `dso-4/7/8/9` so no per-DSO image rebuild is needed.
+- **`dso-multi`** — multi-DSO per tenant namespace (instance-scoped
+  workload names for `mode=dso`), dashboard dropdown for
+  `upstreamBusId`, `ASSET_BUS_MAP` pre-populated with
+  `dso-4/7/8/9`. Stable fallback.
+- **`classroom`** — **live branch on the reference cluster** (Flux
+  `GitRepository` tracks it). Four isolated student tenants
+  (`tenant-group1..tenant-group4`), cross-tenant CNPs per tenant,
+  V-clamp tightened to 0.85 so the 4th concurrent student DSO
+  deliberately fails Newton–Raphson — a teaching signal about
+  grid stability. Operator runbook at `deploy/classroom/README.md`;
+  per-group form values at `tests/T-002-classroom.md`.
 - **`distributed`**, **`dso-auto-archive`** — reference-only
   experiments (one-kind-per-asset, and click-deploy auto-provisioning
   respectively). Neither is merged anywhere.
@@ -246,5 +252,8 @@ and uses it as the DSO's internal slack setpoint.
 - `deploy/stage2/README.md` — how to bring up a second/third DSO by
   hand (the CR and CNP manifests that complement the chart).
 - `tests/README.md` — manual-test log; T-001 validates the
-  click-deploy flow end-to-end.
+  click-deploy flow end-to-end, T-002 covers classroom mode.
+- `deploy/classroom/README.md` — operator runbook for classroom
+  mode (four student tenants, physics tuned for a 4-DSO breaking
+  point).
 - Upstream pattern: <https://github.com/cozystack/external-apps-example/pull/2>.

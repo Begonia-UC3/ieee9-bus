@@ -30,15 +30,18 @@ your tie bus.
 - A **GitHub account** — any personal account. You will host your
   `model.json` in a public repo of yours. No link to any course
   system required.
-- **Keycloak login** (`username` + temporary password) for the
-  Cozystack dashboard — the instructor hands these out at the
-  start of class. One login per team (teams A and B). Not tied to
-  your email or GitHub account; it's a local account in
-  Cozystack's own Keycloak.
-- The current **image sha tag** for `imageTag` in the form
-  (something like `sha-9ab221a`). The instructor gives you the
-  current value at the start of class — it advances whenever the
-  `classroom` branch gets a new commit.
+- The instructor will hand out three things at the start of class:
+  1. **Keycloak username + temporary password** — one login per
+     team (teams A and B). Not tied to your email or GitHub yet;
+     it's a local account in Cozystack's Keycloak that you will
+     personalise in Step 1.
+  2. **Image sha tag** like `sha-9ab221a` — the value you will
+     paste into the `imageTag` field when deploying your DSO. It
+     advances whenever the `classroom` branch gets a new commit,
+     so the instructor reads the current value off the running
+     cluster and writes it on the whiteboard.
+  3. **Your assigned bus:** team A gets bus 4 / `assetId dso-4`;
+     team B picks one free bus out of 7 / 8 / 9.
 
 ---
 
@@ -46,7 +49,7 @@ your tie bus.
 
 Your team has **30–60 minutes** at the dashboard. Plan for:
 
-- **Core (must do, ~30 min):** Steps 1–3 + Experiment A.
+- **Core (must do, ~30 min):** Steps 1–4 + Experiment A.
   Proves that your DSO deploys, converges internally, is visible
   from the transmission grid, and that model changes propagate
   live.
@@ -81,237 +84,362 @@ but hand the interactive dashboard session to them.
 
 ---
 
-## Step 1. Prepare your network model
+## Step 1. Claim your Keycloak account *(5 min)*
 
-The model is a single JSON file in your **public** GitHub
-repository. Example:
-<https://github.com/Begonia-UC3/dso-model/blob/main/model.json>
+The instructor has pre-created a team account (`team-a` or
+`team-b`) with a temporary password. Your first task is to
+claim it — set your own email and a real password.
 
-Minimum shape:
+1. Open <https://dashboard.cozystack-demo.org> in a browser.
+   You'll be redirected to a Keycloak login page.
+2. Log in with the username the instructor gave you (e.g.
+   `team-a`) and the temporary password.
+3. Keycloak will redirect you to the dashboard. You should
+   see **one namespace** — `tenant-group1` (team A) or
+   `tenant-dsos` (team B). If you see "forbidden" or an
+   empty namespace list, tell the instructor — the RBAC
+   binding didn't land.
+4. Top-right corner of the dashboard → your username →
+   **Account** (or go directly to
+   <https://keycloak.cozystack-demo.org/realms/cozy/account>).
+5. On the Account page, fill in **Email** with your real
+   email address, **First name** and **Last name** with
+   your name, click **Save**.
+6. On the **Signing In** tab → **Password** → **Update** →
+   set a new password you will remember. **Write it down on
+   paper** — if you lose it, the instructor has to reset it
+   via a CR and it takes ~5 minutes.
 
-```json
-{
-  "s_base": 100,
-  "buses": [
-    { "id": 1, "type": "slack" },
-    { "id": 2, "type": "pq", "p_mw": 15, "q_mvar": 4 },
-    { "id": 3, "type": "pq", "p_mw": 12, "q_mvar": 3 },
-    { "id": 4, "type": "pq", "p_mw": 8,  "q_mvar": 2 }
-  ],
-  "branches": [
-    { "from": 1, "to": 2, "r": 0.02, "x": 0.08, "b": 0.0 },
-    { "from": 2, "to": 3, "r": 0.03, "x": 0.10, "b": 0.0 },
-    { "from": 2, "to": 4, "r": 0.04, "x": 0.12, "b": 0.0 }
-  ],
-  "external_tie": {
-    "bus_id": 1,
-    "asset_id": "dso-4"
-  }
-}
-```
+From this point on, use your own password to log in. The
+temporary password no longer works.
 
-Requirements:
-
-1. `external_tie.asset_id` **must exactly match** the `assetId`
-   you were assigned (`dso-4`, `dso-7`, `dso-8`, or `dso-9`) —
-   otherwise `grid-central` silently drops your data (there is
-   no TTL on silent drops, so you won't get an error).
-2. The slack bus (`type: "slack"`) is the tie point to the
-   transmission grid. `external_tie.bus_id` must point at it.
-3. At least 2 buses, at least 1 branch. Reasonable: 4–6 buses.
-4. The repository must be **public** — this first iteration has
-   no auth wiring for git-sync.
-
-Actions:
-
-1. Fork `Begonia-UC3/dso-model` or create a new public repo
-   with a `model.json` file.
-2. Edit the model for your scenario — invent feeders, loads,
-   topology. The total load determines your baseline tie
-   injection: that's what IEEE-9 will see from you.
+> **If the "Save" button on the Account page returns an HTTP
+> 500 error**, ignore the email/name update and just change
+> the password. The rest of the class works fine without a
+> real email — it's a local Keycloak account, not a
+> mail-backed identity.
 
 ---
 
-## Step 2. Click-deploy your `Ieee9Zone` through the dashboard
+## Step 2. Fork the starter `model.json` and put it in your repo *(5 min)*
 
-1. Log into the Cozystack dashboard with your Keycloak account.
-2. Select your namespace (`tenant-group1` or `tenant-dsos`).
-3. **Simulation → IEEE 9-Bus Zone → Create.**
-4. Fill the form:
+The model is a single JSON file in your **public** GitHub
+repository.
+
+1. Open <https://github.com/Begonia-UC3/dso-model> in a new
+   tab, click **Fork** (top-right). This creates
+   `<your-username>/dso-model` under your own account.
+2. In your fork, open `model.json` — this is the file
+   students will edit throughout the experiments. It already
+   has a working 4-bus template:
+
+```json
+{
+  "s_base": 100.0,
+  "buses": [
+    {"id": 1, "type": "slack", "v_setpoint": 1.02, "p_gen_mw": 0.0, "q_gen_mvar": 0.0, "p_load_mw": 0.0,  "q_load_mvar": 0.0,  "base_kv": 138.0},
+    {"id": 2, "type": "pq",    "v_setpoint": 1.0,  "p_gen_mw": 0.0, "q_gen_mvar": 0.0, "p_load_mw": 80.0, "q_load_mvar": 15.0, "base_kv": 13.8},
+    {"id": 3, "type": "pq",    "v_setpoint": 1.0,  "p_gen_mw": 0.0, "q_gen_mvar": 0.0, "p_load_mw": 55.0, "q_load_mvar": 20.0, "base_kv": 13.8},
+    {"id": 4, "type": "pq",    "v_setpoint": 1.0,  "p_gen_mw": 0.0, "q_gen_mvar": 0.0, "p_load_mw": 30.0, "q_load_mvar": 12.0, "base_kv": 13.8}
+  ],
+  "branches": [
+    {"from": 1, "to": 2, "r_pu": 0.01, "x_pu": 0.08, "b_pu": 0.10, "rate_mva": 150, "is_transformer": true},
+    {"from": 2, "to": 3, "r_pu": 0.02, "x_pu": 0.10, "b_pu": 0.15, "rate_mva": 100, "is_transformer": false},
+    {"from": 2, "to": 4, "r_pu": 0.02, "x_pu": 0.12, "b_pu": 0.12, "rate_mva": 100, "is_transformer": false}
+  ],
+  "external_tie": {"bus_id": 1, "asset_id": "dso"}
+}
+```
+
+Total load: 80 + 55 + 30 = **165 MW** — that's your baseline
+draw from the transmission grid. Leave everything as-is for
+now; you'll edit the `p_load_mw` values in Experiments A/B.
+
+> **Your `external_tie.asset_id` in the JSON is ignored** —
+> the Ieee9Zone CR's `spec.assetId` (e.g. `dso-4`) overrides
+> it at runtime. So it doesn't matter whether the JSON says
+> `"dso"` or `"dso-4"` — just leave it at the starter value.
+
+Copy the HTTPS URL of your fork (e.g.
+`https://github.com/yourname/dso-model.git`) — you will
+paste it in the next step.
+
+---
+
+## Step 3. Deploy your `Ieee9Zone` *(5–10 min)*
+
+There are two ways: the dashboard form (nicer) and the CLI
+fallback (always works).
+
+### 3.1. Try the dashboard form first
+
+1. In the Cozystack dashboard, select your tenant namespace.
+2. **Simulation → IEEE 9-Bus Zone → Create.**
+3. Fill the form:
 
    | Field                    | Value                                          |
    | ------------------------ | ---------------------------------------------- |
-   | name                     | something meaningful, e.g. `mydso`             |
+   | name                     | `mydso`                                        |
    | mode                     | `dso`                                          |
    | imageTag                 | `sha-xxxxxxx` (*the value the instructor gave you*) |
-   | assetId                  | `dso-4` / `dso-7` / `dso-8` / `dso-9`          |
-   | upstreamBusId            | `4` / `7` / `8` / `9` (**same number**)        |
+   | assetId                  | `dso-4` (team A) / `dso-7`, `dso-8` or `dso-9` (team B) |
+   | upstreamBusId            | `4` (team A) / `7`, `8` or `9` (team B) — **same number** |
    | gridCentralUrl           | `http://grid-central.tenant-root:8000`         |
-   | modelRepoUrl             | URL of your repo (ending in `.git`)            |
+   | modelRepoUrl             | the HTTPS URL of your fork (ends in `.git`)    |
    | modelRepoBranch          | `main`                                         |
    | modelPath                | `model.json`                                   |
    | modelSyncIntervalSeconds | `30`                                           |
    | ingressEnabled           | `true`                                         |
-   | ingressHost              | `<teamname>-dso.cozystack-demo.org`            |
+   | ingressHost              | `group1-dso.cozystack-demo.org` (team A) or `dsos-dso.cozystack-demo.org` (team B) |
    | ingressClassName         | `tenant-root`                                  |
    | tlsEnabled               | `true`                                         |
    | tlsClusterIssuer         | `letsencrypt-prod`                             |
 
-5. **Submit.** Cozystack provisions a HelmRelease, Flux brings
-   up a Deployment with two containers: the main DSO service
-   plus a `git-sync` sidecar that clones your model repo.
+4. **Click Submit.** If Cozystack accepts, skip to Step 4.
 
----
+### 3.2. If the Submit button is greyed out or doesn't respond
 
-## Step 3. Verify everything is alive
+This is a known Cozystack dashboard glitch — the form
+pre-validation sometimes refuses to enable Submit even when
+the data is valid. Fallback path: apply the same CR via
+`kubectl` on the cluster host.
 
-**3.1. Check the Pod and Ingress** (through the dashboard or
-via `kubectl`):
+Ask the instructor to open a cluster shell (or get
+kubeconfig), then paste this whole block (replace the 4
+highlighted values with **yours**) and press Enter:
 
 ```bash
-kubectl get pods,ingress -n <your-namespace>
+kubectl apply -f - <<'EOF'
+apiVersion: apps.cozystack.io/v1alpha1
+kind: Ieee9Zone
+metadata:
+  name: mydso
+  namespace: tenant-group1             #  <-- CHANGE to tenant-dsos for team B
+spec:
+  mode: dso
+  replicas: 1
+  imageTag: sha-xxxxxxx                #  <-- CHANGE to instructor's sha
+  gridCentralUrl: http://grid-central.tenant-root:8000
+  tickInterval: "1.0"
+  modelRepoUrl: https://github.com/YOUR-GITHUB/dso-model.git   # <-- CHANGE
+  modelRepoBranch: main
+  modelPath: model.json
+  modelSyncIntervalSeconds: 30
+  assetId: dso-4                       #  <-- CHANGE for team B (dso-7/8/9)
+  upstreamBusId: "4"                   #  <-- CHANGE for team B ("7"/"8"/"9")
+  upstreamPollSeconds: 5
+  ingressEnabled: true
+  ingressHost: group1-dso.cozystack-demo.org   #  <-- CHANGE for team B
+  ingressClassName: tenant-root
+  tlsEnabled: true
+  tlsClusterIssuer: letsencrypt-prod
+EOF
 ```
 
-The Pod should be `Ready 2/2` (DSO + git-sync). The Ingress
-should have a Let's Encrypt certificate.
+If the paste renders with extra tab characters or mangled
+indentation, save the block to a file via `nano /tmp/dso.yaml`,
+then fix indentation so that `apiVersion`, `kind`, `metadata`,
+`spec` all start at the **first column** (zero leading spaces),
+and their children are indented by 2 spaces, not 4. Then
+`kubectl apply -f /tmp/dso.yaml`.
 
-**3.2. Open your DSO dashboard** at your `ingressHost`. You
-should see:
-
-- Your distribution network topology.
-- Voltage and current on every bus.
-- `converged: True`, `iterations: <...>` — internal NR solved.
-- `tie_injection.p_mw` — how many MW flow from IEEE-9 to you.
-
-**3.3. Confirm `grid-central` sees you:**
-
-Open <https://ieee9.cozystack-demo.org>. Find your bus (4, 7,
-8, or 9). The load on it should have risen by an amount close
-to your `tie_injection.p_mw`. If it's still at the base value,
-the transmission grid is ignoring you (see troubleshooting).
+Either path ends with Cozystack provisioning a HelmRelease
+named `zone-mydso`, which Flux installs as a Deployment + Service
++ Ingress.
 
 ---
 
-## Step 4. Experiment A — live model reload *(core, ~10 min)*
+## Step 4. Verify the DSO is alive and the grid sees it *(5 min)*
 
-Goal: prove that the GitOps model-reload loop works. No pod
-restart, no redeploy — just a `git push` and the whole chain
-picks up the change.
+Everything you check here is on the **web dashboards**, no
+terminal needed.
 
-**Open two browser windows side-by-side** before you start:
+**4.1. Your DSO dashboard.** Open
+`https://group1-dso.cozystack-demo.org` (team A) or the host
+you picked (team B). The page may take 1–2 minutes after
+deploy for the Let's Encrypt certificate to issue.
 
-- **Window 1 — your DSO dashboard:** your `ingressHost` (e.g.
-  `https://group1-dso.cozystack-demo.org`). Find the field
-  labelled **`tie_injection.p_mw`** (how many MW your DSO
-  draws from the transmission grid). **Write down the current
-  number**, say *158 MW*.
-- **Window 2 — transmission dashboard:**
-  <https://ieee9.cozystack-demo.org>. Find **bus 4** (team A)
-  or the bus you picked (team B). **Write down the current
-  `Load` value shown on your bus**, say *162 MW*.
+You should see:
 
-**Then push a small edit.** In your GitHub repo, open
-`model.json`, change one PQ bus's `p_load_mw` by about 50%
-(e.g. `80 → 120`). Commit + push.
+- A topology diagram of your 4-bus distribution network.
+- Each bus labelled with `V` (voltage, around 0.97–1.02 pu)
+  and load.
+- A **status panel** with:
+  - `converged: True`
+  - `iterations:` a small number (usually 3–5)
+  - `tie_injection.p_mw:` roughly **160 MW** with the starter
+    `model.json` — this is the MW your DSO draws from the
+    transmission grid.
+  - `upstream_feedback.v_pu:` roughly **0.97** — the voltage
+    the transmission grid reports back to your slack bus.
 
-**Watch the two windows for 30–60 seconds.** Both numbers
-you wrote down should change:
+**4.2. Transmission dashboard.** Open
+<https://ieee9.cozystack-demo.org>. Find **your bus** on the
+IEEE-9 ring diagram:
 
-- DSO window: `tie_injection.p_mw` rises from ~158 → ~200 MW.
-- Transmission window: bus 4's `Load` rises from ~162 → ~205 MW.
+- Team A → **bus 4**.
+- Team B → whichever bus you picked (7 / 8 / 9).
 
-Nothing restarted. That's the whole point — screenshot both
-windows before & after.
+On your bus, the **Load** value should have risen from zero
+(before your DSO was deployed) to roughly **162 MW** — very
+close to the `tie_injection.p_mw` you see on your own DSO.
+That match confirms the two sides are talking.
+
+**If you see `tie_injection` on your DSO but the transmission
+dashboard shows zero load on your bus:** your `assetId` in
+the CR does not match an entry that `grid-central` knows
+about. Double-check the `assetId` value (`dso-4` / `dso-7` /
+`dso-8` / `dso-9`). See troubleshooting.
+
+---
+
+## Step 5. Experiment A — live model reload *(core, ~10 min)*
+
+**Goal.** Prove that the GitOps model-reload loop works. No
+pod restart, no redeploy — a `git push` and the whole chain
+picks up the change within a minute.
+
+**Before you change anything, open two browser windows
+side-by-side and write down the baseline numbers:**
+
+- **Window 1 — your DSO dashboard** (`https://group1-dso…` or
+  `dsos-dso…`). On the status panel, find and write down:
+  - `tie_injection.p_mw` ≈ **160 MW**
+- **Window 2 — transmission dashboard**
+  (<https://ieee9.cozystack-demo.org>). Find **your bus** on
+  the ring diagram and write down:
+  - `Load` ≈ **162 MW**
+
+**Now change exactly one line in `model.json`.** On GitHub,
+in your fork, click on `model.json` → pencil icon (edit).
+Replace the `p_load_mw` value on bus 2 from `80.0` to
+`120.0`. Concretely, the **old** line is:
+
+```json
+    {"id": 2, "type": "pq",    "v_setpoint": 1.0,  "p_gen_mw": 0.0, "q_gen_mvar": 0.0, "p_load_mw": 80.0, "q_load_mvar": 15.0, "base_kv": 13.8},
+```
+
+Replace it with:
+
+```json
+    {"id": 2, "type": "pq",    "v_setpoint": 1.0,  "p_gen_mw": 0.0, "q_gen_mvar": 0.0, "p_load_mw": 120.0, "q_load_mvar": 30.0, "base_kv": 13.8},
+```
+
+Scroll down → **Commit changes** → leave the default commit
+message → **Commit changes** again.
+
+**Wait 30–60 seconds**, then refresh both windows. The same
+two numbers you wrote down should move to:
+
+- DSO dashboard: `tie_injection.p_mw` ≈ **200 MW** (was 160).
+- Transmission dashboard: your bus `Load` ≈ **205 MW** (was
+  162).
+
+Nothing restarted. That is the whole teaching point —
+screenshot both windows before and after.
 
 > **Voltage numbers barely move with a small load bump.** The
 > transmission grid has a 500 MW diesel on bus 2 that easily
 > absorbs a 40 MW extra load — so bus voltages move by only
 > 0.003–0.005 pu, which you will not see on the voltage
-> graphs. The `Load` number on your bus is the primary visual
-> signal for Experiment A. If you want to see voltage move,
-> go to Experiment B.
+> graphs. The `Load` number on your bus is the primary
+> visual signal for Experiment A. If you want to see voltages
+> move visibly, continue to Experiment B.
 
 ---
 
-## Step 5. Experiment B — closed-loop voltage feedback *(stretch, ~15 min)*
+## Step 6. Experiment B — closed-loop voltage feedback *(stretch, ~15 min)*
 
-> Skip if your team is already at the 30-minute mark; the core
-> deliverables (Steps 1–3 + Experiment A) are enough for a pass.
+> Skip if your team is already at the 30-minute mark; the
+> core deliverables (Steps 1–4 + Experiment A) are enough for
+> a pass.
 
-Your DSO does more than push data upstream — it also *listens*
-for the voltage at your external bus in IEEE-9 and uses that
-as the slack setpoint inside its own network (closed-loop V
-feedback). A small Experiment-A bump does not move voltages
-enough to see this — you need to push the grid harder.
+**Goal.** Show that your DSO doesn't just push data up — it
+also *listens* for the voltage at its tie bus in IEEE-9 and
+uses that as the slack setpoint inside its own network
+(closed-loop V feedback). Experiment A's small bump didn't
+move voltages enough to see this; you need to push harder.
 
-**Open three browser windows side-by-side:**
+**Open three windows side-by-side, write down baselines:**
 
-1. **Your DSO dashboard.** Find:
-   - `upstream_feedback.v_pu` — the voltage the transmission
-     grid reports back to you. Baseline ≈ **0.97 pu**.
-   - Internal bus voltages on your distribution network
-     (e.g. bus 2, 3, 4 inside your DSO). Baseline all
-     near **1.00 pu**.
-2. **Transmission dashboard** (`ieee9.cozystack-demo.org`).
-   Find the **voltage** reading on **your bus** (bus 4 / 7 /
-   8 / 9). Baseline ≈ **1.00 pu**.
+1. **Your DSO dashboard.**
+   - `upstream_feedback.v_pu` ≈ **0.97**
+   - Internal bus voltages (bus 2, 3, 4 inside your DSO) all
+     near **1.00 pu**
+2. **Transmission dashboard.** Voltage on your tie bus
+   (4 / 7 / 8 / 9) ≈ **1.00 pu**
 3. Your GitHub repo editor window.
 
-**Push a large load.** Set all three PQ buses in your model
-to heavy values — total ≈ **310 MW** across the DSO. A good
-starting point:
+**Replace the entire `model.json`** in your fork with this
+exact content (total load now 310 MW):
 
-| Bus | p_load_mw | q_load_mvar |
-|-----|-----------|-------------|
-| 2   | 150       | 40          |
-| 3   | 100       | 35          |
-| 4   | 60        | 20          |
+```json
+{
+  "s_base": 100.0,
+  "buses": [
+    {"id": 1, "type": "slack", "v_setpoint": 1.02, "p_gen_mw": 0.0, "q_gen_mvar": 0.0, "p_load_mw": 0.0,   "q_load_mvar": 0.0,  "base_kv": 138.0},
+    {"id": 2, "type": "pq",    "v_setpoint": 1.0,  "p_gen_mw": 0.0, "q_gen_mvar": 0.0, "p_load_mw": 150.0, "q_load_mvar": 40.0, "base_kv": 13.8},
+    {"id": 3, "type": "pq",    "v_setpoint": 1.0,  "p_gen_mw": 0.0, "q_gen_mvar": 0.0, "p_load_mw": 100.0, "q_load_mvar": 35.0, "base_kv": 13.8},
+    {"id": 4, "type": "pq",    "v_setpoint": 1.0,  "p_gen_mw": 0.0, "q_gen_mvar": 0.0, "p_load_mw": 60.0,  "q_load_mvar": 20.0, "base_kv": 13.8}
+  ],
+  "branches": [
+    {"from": 1, "to": 2, "r_pu": 0.01, "x_pu": 0.08, "b_pu": 0.10, "rate_mva": 150, "is_transformer": true},
+    {"from": 2, "to": 3, "r_pu": 0.02, "x_pu": 0.10, "b_pu": 0.15, "rate_mva": 100, "is_transformer": false},
+    {"from": 2, "to": 4, "r_pu": 0.02, "x_pu": 0.12, "b_pu": 0.12, "rate_mva": 100, "is_transformer": false}
+  ],
+  "external_tie": {"bus_id": 1, "asset_id": "dso"}
+}
+```
 
-Commit + push. **Wait ~45 seconds**, then look:
+Commit. **Wait ~45 seconds**, then look at all three windows:
 
-- **Transmission dashboard:** voltage on your bus sags from
-  ~1.00 → **~0.90 pu**. This is now obvious on the voltage
-  graph — needle visibly drops.
-- **DSO dashboard — `upstream_feedback.v_pu`:** drops from
-  ~0.97 → **~0.90**. This is the new setpoint your DSO got
-  from the transmission grid.
-- **DSO dashboard — internal bus voltages:** all sag from
-  ~1.00 → **~0.88–0.92 pu**, proportionally. This is the
-  closed loop working — magistral said "you're stressing me,
-  here is a lower voltage reference" and your internal grid
-  recalculated accordingly.
+- **Transmission dashboard.** Voltage on your tie bus sags
+  **from ~1.00 to ~0.90 pu** — clearly visible on the
+  voltage graph, not just a number.
+- **DSO dashboard — `upstream_feedback.v_pu`.** Drops
+  **from ~0.97 to ~0.90** — this is the new setpoint your
+  DSO just received from the transmission grid.
+- **DSO dashboard — internal bus voltages.** All sag
+  proportionally **from ~1.00 to 0.88–0.92 pu**. The
+  transmission grid effectively said *"you're stressing me;
+  here is a lower reference"*, and your internal NR
+  recalculated with the new reference.
 
-Screenshot all three before + after. The three simultaneous
-drops (magistral bus V, upstream_feedback V, internal V) are
-the full teaching signal of this experiment.
+Three simultaneous voltage drops in three different places
+— that is the full teaching signal. Screenshot all three
+before and after.
 
 ---
 
-## Step 6. Experiment C — the stability edge *(joint session, ~15 min)*
+## Step 7. Experiment C — the stability edge *(joint session, ~15 min)*
 
 > This experiment is run jointly with the other team at the
 > end of the class — both teams need an active `Ieee9Zone`
 > with heavy load at the same time. The instructor will call
 > everyone together.
 
-One team alone **cannot** break the transmission grid — the
-500 MW diesel on bus 2 easily absorbs a single DSO at 310 MW.
-But with **both teams** pushing ~310 MW each, the total load
-exceeds what slack + diesel can support while keeping every
-bus voltage above the 0.80 pu clamp.
+**Goal.** Show that one team's heavy load alone cannot break
+the IEEE-9 grid (the 500 MW diesel on bus 2 easily absorbs
+a single DSO at 310 MW), but **two teams together can** —
+and Newton–Raphson then gives up with `converged: false`.
 
 **Procedure:**
 
-1. Both teams simultaneously push the "~310 MW" model from
-   Experiment B.
-2. Watch the **transmission dashboard**
-   (`ieee9.cozystack-demo.org`):
-   - Voltages on buses 4 and 7/8/9 drop further, heading
+1. Both teams keep their Experiment-B model applied (310 MW
+   per team). If you already pushed that model, no change
+   needed. If you rolled back, paste the same JSON again
+   and commit.
+2. Once both teams confirm `tie_injection.p_mw ≈ 300 MW`
+   each on their own DSO dashboards, switch attention to
+   the **transmission dashboard**
+   (<https://ieee9.cozystack-demo.org>).
+3. Over ~30–60 seconds, watch the status panel at the top
+   of the page:
+   - Voltages on buses 4 and 7 / 8 / 9 drop further, heading
      toward 0.85 pu, then 0.80.
-   - The **status field on top of the page flips from
-     `converged: true` to `converged: false`**, and
-     `iterations` hits **20** (the solver hit its iteration
-     cap).
+   - **The `converged` status flips from `true` to `false`**
+     and **`iterations` hits 20** (the solver hit its cap
+     and gave up).
 
 Expected:
 

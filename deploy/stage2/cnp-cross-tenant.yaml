@@ -1,0 +1,54 @@
+# Cross-tenant CiliumNetworkPolicy pair opening the channel from the
+# DSO pod in tenant-dsos to grid-central in tenant-root.
+#
+# Why both are needed: Cozystack's stock `allow-internal-communication`
+# scopes `fromEndpoints: [{}]` to the policy's own namespace, and
+# `allow-external-communication`'s `fromEntities: [cluster]` does NOT
+# cover arbitrary pod-to-pod cross-namespace TCP in practice. Without
+# this pair, cross-tenant TCP times out silently (pure L4 drop — DNS
+# resolves fine). Both egress AND ingress must allow the traffic or
+# Cilium default-denies.
+#
+# Kept as hand-applied manifests rather than chart-rendered: keeping
+# cross-namespace resources out of charts was one of the main
+# takeaways from the abandoned dso-auto effort. Revisit and move into
+# the `ieee9-zone` chart if a second cross-tenant DSO ever lands
+# (dso-4/7/9).
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: allow-dso-to-grid-central-tenant-root
+  namespace: tenant-dsos
+spec:
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: dso
+  egress:
+  - toEndpoints:
+    - matchLabels:
+        k8s:io.kubernetes.pod.namespace: tenant-root
+        app.kubernetes.io/name: grid-central
+    toPorts:
+    - ports:
+      - port: "8000"
+        protocol: TCP
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: allow-from-tenant-dsos-dso-to-grid-central
+  namespace: tenant-root
+spec:
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: grid-central
+  ingress:
+  - fromEndpoints:
+    - matchLabels:
+        k8s:io.kubernetes.pod.namespace: tenant-dsos
+        app.kubernetes.io/name: dso
+    toPorts:
+    - ports:
+      - port: "8000"
+        protocol: TCP

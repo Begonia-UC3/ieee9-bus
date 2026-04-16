@@ -1,0 +1,47 @@
+# Ieee9Zone CR for the second manual DSO on bus 8.
+#
+# Applied into the existing `tenant-dsos` Cozystack tenant after the
+# platform chart has registered `Ieee9Zone` (Flux GitRepository tracks
+# the `dso-bus8` branch). Also requires the two CNPs in
+# cnp-cross-tenant.yaml to open the cross-tenant channel, and a
+# grid-central image with "dso-8" in ASSET_BUS_MAP (built by CI from
+# `dso-bus8` branch; apply via Ieee9Grid/demo spec.imageTag).
+---
+apiVersion: apps.cozystack.io/v1alpha1
+kind: Ieee9Zone
+metadata:
+  name: dso-bus8
+  namespace: tenant-dsos
+spec:
+  mode: dso
+  # Pin to immutable sha-<short> on dso-branch HEAD to bypass kubelet's
+  # IfNotPresent cache (CLAUDE.md behavioural gotcha). Update when a new
+  # dso-branch commit is needed.
+  imageTag: sha-73d2ca7
+
+  # Model repo — reused from the bus-6 DSO in tenant-root. Two DSOs
+  # pulling the same feeder is fine for stage 1/2; in a real deployment
+  # each operator would point at their own repo.
+  modelRepoUrl: https://github.com/Begonia-UC3/dso-model.git
+  modelRepoBranch: main
+  modelPath: model.json
+  modelSyncIntervalSeconds: 30
+
+  # Closed-loop wiring (stage 2): DSO reports as asset_id=dso-8 and
+  # polls V at outer bus 8 to drive its internal slack setpoint.
+  assetId: dso-8
+  upstreamBusId: "8"
+  upstreamPollSeconds: 5
+
+  # Short DNS form — cluster domain is `cozy.local`, not
+  # `cluster.local` (Cozystack gotcha #11).
+  gridCentralUrl: http://grid-central.tenant-root:8000
+
+  tickInterval: "1.0"
+  replicas: 1
+
+  ingressEnabled: true
+  ingressHost: dso-bus8.cozystack-demo.org
+  ingressClassName: tenant-root   # tenant-dsos uses tenant-root's ingress
+  tlsEnabled: true
+  tlsClusterIssuer: letsencrypt-prod

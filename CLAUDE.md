@@ -393,8 +393,12 @@ Once flipped, kubelet retries on its own backoff.
 
 - **`.github/workflows/images.yaml`** — matrix-builds 5 images
   (`grid-central`, `diesel-gen`, `battery`, `datacenter`, `dso`) on
-  push to `main`/`dso`, on PRs (without push), and on `v*` tags. Cache
-  via `gha` scoped per service. linux/amd64 only.
+  push to `main`/`dso`/`dso-bus8`, on PRs (without push), and on
+  `v*` tags. Cache via `gha` scoped per service. linux/amd64 only.
+  Adding a feature branch to the cluster-facing list requires
+  editing `push.branches` — otherwise pods trying to deploy that
+  branch hit `ImagePullBackOff` on the nonexistent default tag
+  (platform gotcha #9).
 - **`.github/workflows/chart.yaml`** — runs `helm lint` and
   `helm template` on both packages plus `python3 -c 'yaml.safe_load_all'`
   on `init.yaml` for any change to `packages/`, `init.yaml`, or

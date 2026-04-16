@@ -45,6 +45,20 @@ branch `distributed` is an older intermediate step (one dedicated
 approach here. Ветка `distributed` does not merge anywhere — it stays
 as a reference point. Ветка `dso` is the current direction.
 
+Side branches forked from `dso`:
+
+- `dso-bus8` — adds a second manual `Ieee9Zone mode: dso` deployed
+  into the existing `tenant-dsos` tenant on outer bus 8 (the only
+  remaining idle PQ load slot on IEEE-9). Stage 1 is open loop;
+  stage 2 will wire it to root `grid-central` cross-namespace.
+- `dso-auto-archive` — a click-deploy `Ieee9ZoneAuto` kind
+  (auto-allocated slot, child Cozystack `Tenant`, GitHub repo
+  auto-create) that was prototyped but not shipped — the install
+  pipeline turned out too brittle for first delivery. Lessons from
+  it are distilled in the **Cozystack platform gotchas** section
+  below; full chart code stays on the archived branch as a
+  reference if/when auto-provisioning is reattempted.
+
 ## Repository layout
 
 ```text
@@ -203,6 +217,48 @@ for `mode: dso`) so cross-asset DNS stays predictable. Two
 collide on the workload name — by design, one zone of each mode per
 tenant.
 
+### Second DSO on bus 8 (branch `dso-bus8`, manual)
+
+A second `Ieee9Zone mode: dso` is deployed into the existing
+`tenant-dsos` tenant namespace, attaching to outer **bus 8** — the
+only remaining idle PQ load slot on IEEE-9 (5 = datacenter, 6 = root
+DSO). The chart needs no changes; everything is set on the CR:
+
+```yaml
+apiVersion: apps.cozystack.io/v1alpha1
+kind: Ieee9Zone
+metadata:
+  name: dso-bus8
+  namespace: tenant-dsos
+spec:
+  mode: dso
+  imageTag: dso             # :dso branch tag on GHCR (no v0.1.0 tag yet)
+  modelRepoUrl: https://github.com/Begonia-UC3/dso-model.git
+  modelRepoBranch: main
+  modelPath: model.json
+  upstreamBusId: ""         # stage 1: open loop (disable closed-loop V feedback)
+  ingressEnabled: true
+  ingressHost: dso-bus8.cozystack-demo.org
+  ingressClassName: tenant-root
+  tlsEnabled: true
+  tlsClusterIssuer: letsencrypt-prod
+```
+
+**Stage 1** (current): pure boot test — confirm the pod runs, the
+git-sync sidecar pulls the model, and the DSO's internal
+Newton-Raphson converges. `gridCentralUrl` is left at the in-namespace
+default (`http://grid-central:8000`); since `tenant-dsos` has no such
+service, the upstream POSTs DNS-fail harmlessly and the DSO renders
+its own dashboard standalone. No changes to `tenant-root`.
+
+**Stage 2** (future PR): closed-loop wiring. Will require:
+1. Add `"dso-8": 8` to `ASSET_BUS_MAP` in `grid-central/main.py`.
+2. Set `assetId: dso-8`, `upstreamBusId: "8"`,
+   `gridCentralUrl: http://grid-central.tenant-root.svc.cluster.local:8000`
+   on the CR.
+3. Verify Cozystack's inter-tenant CiliumNetworkPolicy allows the
+   POST from `tenant-dsos` to `tenant-root` (may need an allow rule).
+
 ### DSO mode specifics
 
 When `spec.mode: dso`, the chart injects a **git-sync** sidecar
@@ -284,6 +340,61 @@ for local testing without a real Git repo.
 - **Helm chart conventions** — modelled on
   [`lexfrei/charts`](https://github.com/lexfrei/charts) (per-app
   Chart.yaml, security context defaults, `values.schema.json`).
+
+## Cozystack platform gotchas
+
+Distilled from the abandoned `Ieee9ZoneAuto` effort on
+`dso-auto-archive`. These are platform-level rules that apply to any
+chart in this repo that creates child tenants, runs in-cluster Jobs,
+or wires its own RBAC — they're hard to rediscover and easy to lose
+when the offending chart is archived. Keep this list in sync with
+new findings.
+
+1. **Pod label `policy.cozystack.io/allow-to-apiserver: "true"`** is
+   required for any pod in a tenant namespace that needs to call the
+   Kubernetes API server. Without it Cozystack's Cilium policy
+   silently drops traffic to `10.96.0.1:443`. Bit us in a bootstrap
+   Job whose `kubectl wait` hung forever.
+2. **Cozystack tenant names cannot contain dashes**; only the
+   leading `tenant-` prefix is allowed. `dso-2` is rejected at
+   HelmRelease creation ("release name should start with 'tenant-'
+   and should not contain any other dashes"). Use `dso2` and embed
+   the index without a separator.
+3. **Child tenant namespace = `<parent-ns>-<child-name>`**. Parent
+   `tenant-dsos` + child `dsoN` yields `tenant-dsos-dsoN`, NOT
+   `tenant-dsoN`. Helpers that compute the namespace from just the
+   child name will silently target a non-existent namespace.
+4. **Provision child `Tenant` CRs as pre-install hooks** (weight ≤
+   -10) with `helm.sh/resource-policy: keep`. As regular resources
+   they only land after all pre-install hooks finish, so any earlier
+   pre-install Job that touches the child namespace times out. The
+   `keep` policy means `helm uninstall` leaks the Tenant — explicit
+   out-of-band cleanup is the operator's responsibility.
+5. **Kubernetes label *values* reject `/`** (only label *key*
+   prefixes allow it). Owner-reference labels rendered as
+   `<ns>/<name>` are rejected by Cozystack's HelmRelease validator
+   with a generic "Invalid value". Use `_` as separator instead.
+6. **Duplicate keys in rendered `metadata.labels` silently crash
+   Cozystack's post-renderer.** If a chart's common-labels helper
+   already emits a key, do not re-emit it inline on the same
+   resource — the YAML unmarshal fails and the install never
+   proceeds.
+7. **kubectl image choice for in-cluster Jobs.** `bitnami/kubectl`
+   is no longer anonymously pullable since the 2025 registry
+   lockdown; `rancher/kubectl` is distroless so
+   `command: ["/bin/sh", "-c"]` fails with "no such file"; use
+   **`alpine/k8s:1.30.x`** (busybox + kubectl) for any Job that
+   needs both kubectl and a shell.
+8. **Init containers can't `apk add` under the pod's non-root
+   securityContext.** apk DB writes need UID 0. Override
+   `runAsUser: 0` / `runAsGroup: 0` on the init container only and
+   leave the main container at 65534.
+9. **CI image-tag gating.** `metadata-action` only publishes
+   `:<branch-name>` for branches enumerated in
+   `.github/workflows/images.yaml` `push.branches`. A new feature
+   branch that wants to deploy from the cluster must be added to
+   that list, otherwise pods sit in `ImagePullBackOff` on the
+   nonexistent default `:0.1.0` tag.
 
 ## Things to be careful about
 
@@ -375,7 +486,10 @@ dashboard.
   reports as that asset_id to `grid-central`; if the id isn't in
   `ASSET_BUS_MAP`, the injection is silently ignored. Current valid
   values: `diesel-gen`, `battery`, `datacenter`, `dso`. The conventional
-  default for the nested-grid concept is `"dso"` → bus 6.
+  default for the nested-grid concept is `"dso"` → bus 6. Bus 8 is
+  reserved for the second manual DSO (`dso-bus8` branch); the
+  `ASSET_BUS_MAP` entry `"dso-8": 8` will be added in stage 2 of
+  that work.
 
 ## Operational gotchas
 
@@ -420,7 +534,8 @@ dashboard.
 - Demo deployment (when running):
   - `Ieee9Grid`: <https://ieee9.cozystack-demo.org>
   - `Ieee9Zone mode=diesel`: <https://diesel.cozystack-demo.org>
-  - `Ieee9Zone mode=dso`: <https://dso.cozystack-demo.org>
+  - `Ieee9Zone mode=dso` (bus 6, `tenant-root`): <https://dso.cozystack-demo.org>
+  - `Ieee9Zone mode=dso` (bus 8, `tenant-dsos`): <https://dso-bus8.cozystack-demo.org>
 - DSO model repo: <https://github.com/Begonia-UC3/dso-model>
 - GHCR org: <https://github.com/orgs/Begonia-UC3/packages>
 - Upstream pattern: <https://github.com/cozystack/external-apps-example/pull/2>

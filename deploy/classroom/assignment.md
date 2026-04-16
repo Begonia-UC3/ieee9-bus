@@ -25,14 +25,51 @@ your tie bus.
 
 ---
 
+## Prerequisites (bring with you to class)
+
+- A **GitHub account** — any personal account. You will host your
+  `model.json` in a public repo of yours. No link to any course
+  system required.
+- **Keycloak login** (`username` + temporary password) for the
+  Cozystack dashboard — the instructor hands these out at the
+  start of class. One login per team (teams A and B). Not tied to
+  your email or GitHub account; it's a local account in
+  Cozystack's own Keycloak.
+- The current **image sha tag** for `imageTag` in the form
+  (something like `sha-9ab221a`). The instructor gives you the
+  current value at the start of class — it advances whenever the
+  `classroom` branch gets a new commit.
+
+---
+
+## Time budget
+
+Your team has **30–60 minutes** at the dashboard. Plan for:
+
+- **Core (must do, ~30 min):** Steps 1–3 + Experiment A.
+  Proves that your DSO deploys, converges internally, is visible
+  from the transmission grid, and that model changes propagate
+  live.
+- **Stretch (~30 min more if available):** Experiment B
+  (closed-loop V-feedback — requires your team only).
+- **Joint experiment (instructor coordinates):** Experiment C.
+  Both teams need an active DSO at the same time. Usually run as
+  a short joint session at the end of the class when both teams
+  are finished with their individual runs.
+
+If you run out of time, keep your `Ieee9Zone` alive so the next
+team can see something live on the shared transmission dashboard,
+but hand the interactive dashboard session to them.
+
+---
+
 ## What is already provisioned for you
 
 - **Cozystack dashboard:** <https://dashboard.cozystack-demo.org>
   — Keycloak SSO, each team has its own login. You only see your
   own tenant.
 - **Your tenant namespace:** `tenant-group1` (team A) or
-  `tenant-dsos` (team B). Teams coordinate and take turns — at
-  most one active DSO per team at a time.
+  `tenant-dsos` (team B).
 - **Your tie bus (external tie to IEEE-9):**
   - Team A → bus **4**, `assetId: dso-4`.
   - Team B picks from the free ones: **7**, **8**, or **9**
@@ -106,7 +143,7 @@ Actions:
    | ------------------------ | ---------------------------------------------- |
    | name                     | something meaningful, e.g. `mydso`             |
    | mode                     | `dso`                                          |
-   | imageTag                 | `sha-9ab221a` (*current HEAD of `classroom`*)   |
+   | imageTag                 | `sha-xxxxxxx` (*the value the instructor gave you*) |
    | assetId                  | `dso-4` / `dso-7` / `dso-8` / `dso-9`          |
    | upstreamBusId            | `4` / `7` / `8` / `9` (**same number**)        |
    | gridCentralUrl           | `http://grid-central.tenant-root:8000`         |
@@ -155,7 +192,7 @@ the transmission grid is ignoring you (see troubleshooting).
 
 ---
 
-## Step 4. Experiment A — live model reload
+## Step 4. Experiment A — live model reload *(core, ~10 min)*
 
 Goal: demonstrate that the GitOps approach to the model works
 without any restart.
@@ -173,7 +210,10 @@ without any restart.
 
 ---
 
-## Step 5. Experiment B — closed-loop voltage feedback
+## Step 5. Experiment B — closed-loop voltage feedback *(stretch, ~15 min)*
+
+> Skip if your team is already at the 30-minute mark; the core
+> deliverables (Steps 1–3 + Experiment A) are enough for a pass.
 
 Your DSO does more than push data upstream — it also *listens*
 for the voltage at its external bus in IEEE-9 and uses that as
@@ -195,7 +235,11 @@ feedback).
 
 ---
 
-## Step 6. Experiment C — the stability edge
+## Step 6. Experiment C — the stability edge *(joint session, ~15 min)*
+
+> This experiment is run jointly with the other team at the end
+> of the class — both teams need an active `Ieee9Zone` at the
+> same time. The instructor will call everyone together.
 
 The cluster can host up to 2 active DSOs simultaneously
 (team A and team B). Coordinate with the other team and
@@ -217,23 +261,28 @@ Expected:
 
 ## Deliverables
 
+Minimum to pass (from the core 30-minute slot):
+
 1. **URL of your repo** with `model.json`.
-2. **Screenshots** from all three experiments:
-   - A — `tie_injection` before/after the push.
-   - B — IEEE-9 bus voltage and internal DSO voltage
-     before/after the load bump.
-   - C — transmission in `converged: false` after
-     coordination with the neighbouring team.
-3. **Short report (1–2 pages):**
-   - What topology did you model (how many buses, feeders,
-     loads, typical line parameters)?
-   - What baseline load does your DSO impose on the
-     transmission grid?
-   - How fast does a model change actually propagate from
-     `git push` to the transmission dashboard? (Measure it.)
-   - What did you observe in Experiment C — at what total
-     load did the grid collapse, and what was the voltage at
-     your tie bus at that moment?
+2. **Screenshot of Experiment A** — `tie_injection` before and
+   after the `git push`.
+3. **Short report (1–2 pages)**:
+   - Topology you modelled (how many buses, feeders, loads,
+     typical line parameters).
+   - Baseline load your DSO imposes on the transmission grid.
+   - How fast a model change actually propagated from `git
+     push` to the transmission dashboard. (Measure the lag.)
+
+Extra credit if time allowed:
+
+4. **Experiment B screenshots** — IEEE-9 bus voltage and
+   internal DSO voltage before/after the load bump, and a
+   short comment on how much of the upstream voltage change
+   propagated into your distribution network.
+5. **Experiment C (joint)** — screenshot of the transmission
+   dashboard in `converged: false` state, and a sentence on
+   what total combined load (team A + team B) was required to
+   push NR over the edge.
 
 ---
 

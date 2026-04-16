@@ -194,19 +194,42 @@ the transmission grid is ignoring you (see troubleshooting).
 
 ## Step 4. Experiment A — live model reload *(core, ~10 min)*
 
-Goal: demonstrate that the GitOps approach to the model works
-without any restart.
+Goal: prove that the GitOps model-reload loop works. No pod
+restart, no redeploy — just a `git push` and the whole chain
+picks up the change.
 
-1. Open your repo → edit `model.json`: bump the load on one PQ
-   bus, e.g. `p_mw: 15 → 30`.
-2. `git commit` + `git push`.
-3. Within **~30–50 seconds** (the git-sync interval):
-   - Your DSO dashboard shows `tie_injection.p_mw` changing.
-   - <https://ieee9.cozystack-demo.org> — the IEEE-9 bus you
-     are connected to shows the new value.
-   - **Important:** your Pod does not restart — the model is
-     reloaded by mtime. Check the Pod logs:
-     `model reloaded`.
+**Open two browser windows side-by-side** before you start:
+
+- **Window 1 — your DSO dashboard:** your `ingressHost` (e.g.
+  `https://group1-dso.cozystack-demo.org`). Find the field
+  labelled **`tie_injection.p_mw`** (how many MW your DSO
+  draws from the transmission grid). **Write down the current
+  number**, say *158 MW*.
+- **Window 2 — transmission dashboard:**
+  <https://ieee9.cozystack-demo.org>. Find **bus 4** (team A)
+  or the bus you picked (team B). **Write down the current
+  `Load` value shown on your bus**, say *162 MW*.
+
+**Then push a small edit.** In your GitHub repo, open
+`model.json`, change one PQ bus's `p_load_mw` by about 50%
+(e.g. `80 → 120`). Commit + push.
+
+**Watch the two windows for 30–60 seconds.** Both numbers
+you wrote down should change:
+
+- DSO window: `tie_injection.p_mw` rises from ~158 → ~200 MW.
+- Transmission window: bus 4's `Load` rises from ~162 → ~205 MW.
+
+Nothing restarted. That's the whole point — screenshot both
+windows before & after.
+
+> **Voltage numbers barely move with a small load bump.** The
+> transmission grid has a 500 MW diesel on bus 2 that easily
+> absorbs a 40 MW extra load — so bus voltages move by only
+> 0.003–0.005 pu, which you will not see on the voltage
+> graphs. The `Load` number on your bus is the primary visual
+> signal for Experiment A. If you want to see voltage move,
+> go to Experiment B.
 
 ---
 
@@ -216,41 +239,85 @@ without any restart.
 > deliverables (Steps 1–3 + Experiment A) are enough for a pass.
 
 Your DSO does more than push data upstream — it also *listens*
-for the voltage at its external bus in IEEE-9 and uses that as
-the slack setpoint inside its own network (closed-loop V
-feedback).
+for the voltage at your external bus in IEEE-9 and uses that
+as the slack setpoint inside its own network (closed-loop V
+feedback). A small Experiment-A bump does not move voltages
+enough to see this — you need to push the grid harder.
 
-1. In a second window, open the transmission dashboard and
-   note the voltage at your tie bus (say, 1.00 pu).
-2. Increase the load in your model to a large value (total
-   ~200 MW across all buses). Push.
-3. After 30–50 seconds, look at both dashboards:
-   - Transmission: the voltage at your bus has sagged (e.g.
-     to 0.92 pu) — IEEE-9 is trying to keep the balance.
-   - Your DSO: internal voltages have also sagged
-     proportionally, because the slack received the new
-     setpoint from the transmission grid.
-4. The field `/api/status.last_solve.upstream_feedback` on
-   your DSO shows the last V received from upstream.
+**Open three browser windows side-by-side:**
+
+1. **Your DSO dashboard.** Find:
+   - `upstream_feedback.v_pu` — the voltage the transmission
+     grid reports back to you. Baseline ≈ **0.97 pu**.
+   - Internal bus voltages on your distribution network
+     (e.g. bus 2, 3, 4 inside your DSO). Baseline all
+     near **1.00 pu**.
+2. **Transmission dashboard** (`ieee9.cozystack-demo.org`).
+   Find the **voltage** reading on **your bus** (bus 4 / 7 /
+   8 / 9). Baseline ≈ **1.00 pu**.
+3. Your GitHub repo editor window.
+
+**Push a large load.** Set all three PQ buses in your model
+to heavy values — total ≈ **310 MW** across the DSO. A good
+starting point:
+
+| Bus | p_load_mw | q_load_mvar |
+|-----|-----------|-------------|
+| 2   | 150       | 40          |
+| 3   | 100       | 35          |
+| 4   | 60        | 20          |
+
+Commit + push. **Wait ~45 seconds**, then look:
+
+- **Transmission dashboard:** voltage on your bus sags from
+  ~1.00 → **~0.90 pu**. This is now obvious on the voltage
+  graph — needle visibly drops.
+- **DSO dashboard — `upstream_feedback.v_pu`:** drops from
+  ~0.97 → **~0.90**. This is the new setpoint your DSO got
+  from the transmission grid.
+- **DSO dashboard — internal bus voltages:** all sag from
+  ~1.00 → **~0.88–0.92 pu**, proportionally. This is the
+  closed loop working — magistral said "you're stressing me,
+  here is a lower voltage reference" and your internal grid
+  recalculated accordingly.
+
+Screenshot all three before + after. The three simultaneous
+drops (magistral bus V, upstream_feedback V, internal V) are
+the full teaching signal of this experiment.
 
 ---
 
 ## Step 6. Experiment C — the stability edge *(joint session, ~15 min)*
 
-> This experiment is run jointly with the other team at the end
-> of the class — both teams need an active `Ieee9Zone` at the
-> same time. The instructor will call everyone together.
+> This experiment is run jointly with the other team at the
+> end of the class — both teams need an active `Ieee9Zone`
+> with heavy load at the same time. The instructor will call
+> everyone together.
 
-The cluster can host up to 2 active DSOs simultaneously
-(team A and team B). Coordinate with the other team and
-simultaneously raise the loads in your models until the
-voltage at your IEEE-9 bus falls below `0.80 pu`.
+One team alone **cannot** break the transmission grid — the
+500 MW diesel on bus 2 easily absorbs a single DSO at 310 MW.
+But with **both teams** pushing ~310 MW each, the total load
+exceeds what slack + diesel can support while keeping every
+bus voltage above the 0.80 pu clamp.
+
+**Procedure:**
+
+1. Both teams simultaneously push the "~310 MW" model from
+   Experiment B.
+2. Watch the **transmission dashboard**
+   (`ieee9.cozystack-demo.org`):
+   - Voltages on buses 4 and 7/8/9 drop further, heading
+     toward 0.85 pu, then 0.80.
+   - The **status field on top of the page flips from
+     `converged: true` to `converged: false`**, and
+     `iterations` hits **20** (the solver hit its iteration
+     cap).
 
 Expected:
 
-- The transmission dashboard reports `converged: false,
-  iterations: 20` — Newton–Raphson cannot find a solution,
-  at least one bus has hit the lower V-clamp bound.
+- `converged: false, iterations: 20` on the transmission
+  dashboard — Newton–Raphson gave up. At least one bus has
+  hit the lower V-clamp bound.
 - This is **not a bug** — it's the physical stability limit
   of the simplified model. Discuss: what does this mean for
   a real grid? What stabilisation measures could help

@@ -47,10 +47,17 @@ as a reference point. Ветка `dso` is the current direction.
 
 Side branches forked from `dso`:
 
-- `dso-bus8` — adds a second manual `Ieee9Zone mode: dso` deployed
-  into the existing `tenant-dsos` tenant on outer bus 8 (the only
-  remaining idle PQ load slot on IEEE-9). Stage 1 is open loop;
-  stage 2 will wire it to root `grid-central` cross-namespace.
+- `dso-bus8` — first iteration of the second-DSO pattern. Stages
+  1+2 on this branch brought up a single manual `Ieee9Zone mode:
+  dso` on outer bus 8 in `tenant-dsos`, closed-loop. Superseded by
+  `dso-multi`; kept for history.
+- `dso-multi` — **current Flux target**. Generalises the
+  `dso-bus8` work: multiple `Ieee9Zone mode: dso` instances can
+  coexist in the same tenant namespace (workload name is now
+  instance-scoped for `mode=dso`), `upstreamBusId` is a dashboard
+  dropdown over the IEEE-9 PQ buses, and `grid-central`'s
+  `ASSET_BUS_MAP` pre-declares `dso-4/7/8/9` so no image rebuild
+  is needed per new DSO.
 - `dso-auto-archive` — a click-deploy `Ieee9ZoneAuto` kind
   (auto-allocated slot, child Cozystack `Tenant`, GitHub repo
   auto-create) that was prototyped but not shipped — the install
@@ -210,14 +217,63 @@ spec:
 ```
 
 Cozystack renders each `Ieee9Zone` into a `HelmRelease` named
-`zone-<instance-name>`. The Deployment / Service inside use the
-mode's canonical workload name (`diesel-gen` for `mode: diesel`, `dso`
-for `mode: dso`) so cross-asset DNS stays predictable. Two
-`Ieee9Zone` CRs with the same mode in the same namespace would
-collide on the workload name — by design, one zone of each mode per
-tenant.
+`zone-<instance-name>`. Workload-name derivation depends on `mode`:
 
-### Second DSO on bus 8 (branch `dso-bus8`, manual)
+- `mode: diesel` → Deployment / Service named `diesel-gen`
+  (canonical, singleton per tenant — in-namespace DNS stays
+  predictable for assets that need to address it).
+- `mode: dso` → Deployment / Service named after the *instance*
+  (Release name minus the `zone-` prefix that Cozystack adds). So
+  `Ieee9Zone/dso-bus8` renders Deployment `dso-bus8`, and
+  `Ieee9Zone/dso-bus7` renders `dso-bus7` — multiple DSOs can
+  coexist in the same tenant namespace. DSOs are source-only (they
+  POST to grid-central and serve their own UI via Ingress) so
+  losing a fixed `dso` service name costs nothing.
+
+Two `Ieee9Zone mode: diesel` in the same namespace would collide
+on workload name `diesel-gen` — that's by design (one diesel per
+tenant). Two `mode: dso` instances **do not collide** as long as
+their CR `metadata.name` differs.
+
+### Adding a DSO via the dashboard (branch `dso-multi`)
+
+From the Cozystack dashboard **Simulation → IEEE 9-Bus Zone →
+Create** form:
+
+1. `mode` → `dso`.
+2. `upstreamBusId` → pick from the dropdown `{4, 6, 7, 8, 9}` (IEEE-9
+   PQ buses; 5 is taken by datacenter). **Match this with `assetId`
+   below** — e.g. bus 7 → `dso-7`. Free slots depend on who else is
+   deployed; `grid-central`'s `ASSET_BUS_MAP` accepts all five, but
+   two DSOs reporting as the same `asset_id` overwrite each other.
+3. `assetId` → `dso-<N>` where N matches `upstreamBusId`. (Leave
+   empty for the conventional `dso → 6` mapping — that's the
+   tenant-root primary DSO.)
+4. `modelRepoUrl` → the operator's own public Git repo. An example
+   4-bus feeder lives at
+   <https://github.com/Begonia-UC3/dso-model>.
+5. `gridCentralUrl` → `http://grid-central.tenant-root:8000` when
+   deploying in `tenant-dsos` (cross-tenant), or leave the default
+   in-namespace value when co-deploying in `tenant-root` alongside
+   an `Ieee9Grid`.
+6. `ingressHost` → something under the cluster's wildcard domain
+   (e.g. `dso-bus7.cozystack-demo.org`), `ingressClassName:
+   tenant-root`.
+
+Submit. Flux installs a HelmRelease `zone-<name>`, which renders a
+Deployment / Service / Ingress named `<name>`. Verify: the Pod
+reaches Ready, `/api/status` on the Ingress shows
+`converged: true`, and `grid-central.tenant-root`'s
+`/api/grid-state` gains an `asset_overrides.<assetId>` entry within
+a tick.
+
+**One-time cluster prerequisite** for cross-tenant DSOs (operator
+deploying into `tenant-dsos`): the CNP pair in
+`deploy/stage2/cnp-cross-tenant.yaml` must be applied once per
+cluster. Without it the DSO pod's upstream POSTs time out silently
+(Cozystack platform gotcha #10).
+
+### Second DSO on bus 8 (branch `dso-bus8`, manual — historical)
 
 A second `Ieee9Zone mode: dso` is deployed into the existing
 `tenant-dsos` tenant namespace, attaching to outer **bus 8** — the

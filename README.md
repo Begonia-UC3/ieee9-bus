@@ -45,7 +45,8 @@ own Cozystack tenant.
 | battery            |  3  | PV (±gen)  |    85 MW   | inside `Ieee9Grid`                     |
 | datacenter         |  5  | PQ (load)  |   125 MW   | inside `Ieee9Grid`                     |
 | dso (primary)      |  6  | PQ (load)  | tie        | `Ieee9Zone mode=dso` (tenant-root)     |
-| dso-8 (optional)   |  8  | PQ (load)  | tie        | `Ieee9Zone mode=dso` (tenant-dsos, branch `dso-bus8`) |
+| dso-4 / dso-7 / dso-9 | 4 / 7 / 9 | PQ (trans.) | tie | `Ieee9Zone mode=dso` (tenant-dsos, branch `dso-multi`) — any/all |
+| dso-8 (optional)   |  8  | PQ (load)  | tie        | `Ieee9Zone mode=dso` (tenant-dsos)     |
 
 ## Repository layout
 
@@ -77,12 +78,17 @@ Each service ships a `Containerfile` and `requirements.txt`.
 
 - **`main`** — legacy single-chart scaffold (pre-DSO). Not deployed
   anywhere; kept for history.
-- **`dso`** — current canonical line. Introduces `Ieee9Zone` kind with
+- **`dso`** — canonical line. Introduces `Ieee9Zone` kind with
   `spec.mode ∈ {diesel, dso}`, DSO service with nested NR, git-sync
   sidecar for hot-reload, and closed-loop upstream V feedback.
-- **`dso-bus8`** — live branch on the reference cluster. Docs +
-  stage-2 extension (`ASSET_BUS_MAP["dso-8"] = 8`, CI for this
-  branch). Flux `GitRepository` tracks `dso-bus8`.
+- **`dso-bus8`** — first iteration of the second-DSO pattern (one
+  manual DSO on bus 8 in `tenant-dsos`). Superseded by `dso-multi`;
+  retained for history.
+- **`dso-multi`** — **live branch on the reference cluster** (Flux
+  `GitRepository` tracks it). Multi-DSO per tenant namespace
+  (instance-scoped workload names for `mode=dso`), dashboard
+  dropdown for `upstreamBusId`, and `ASSET_BUS_MAP` pre-populated
+  with `dso-4/7/8/9` so no per-DSO image rebuild is needed.
 - **`distributed`**, **`dso-auto-archive`** — reference-only
   experiments (one-kind-per-asset, and click-deploy auto-provisioning
   respectively). Neither is merged anywhere.
@@ -126,18 +132,22 @@ the same tenant namespace (in-namespace DNS resolves
 `http://grid-central:8000` between pods). See `CLAUDE.md` for CR
 examples, image-tag notes, and operational gotchas.
 
-### Second DSO on bus 8
+### Multiple DSOs per tenant (`dso-multi`)
 
-On the `dso-bus8` branch, a **second** `Ieee9Zone mode=dso` is deployed
-into a separate `tenant-dsos` tenant, attaching to outer bus 8 through
-a pair of CiliumNetworkPolicies (cross-tenant traffic is default-blocked).
-Manifests and apply order: [`deploy/stage2/`](deploy/stage2/).
+On `dso-multi` multiple `Ieee9Zone mode=dso` instances coexist in the
+same tenant namespace. The operator picks an outer bus from a
+dropdown (`upstreamBusId ∈ {4, 6, 7, 8, 9}`), paste a model-repo URL,
+and submit — Flux installs a HelmRelease whose Deployment / Service
+are named after the instance (not the mode), so there's no name
+collision between two DSOs. Two hand-applied manifests opening the
+cross-tenant channel live in [`deploy/stage2/`](deploy/stage2/) —
+apply once per cluster, not per DSO.
 
 ## Images
 
 CI (`images.yaml`) publishes 5 images to GHCR, amd64 only, on push to
-`main`, `dso`, and `dso-bus8` branches, on PRs (without push), and on
-`v*` git tags:
+`main`, `dso`, `dso-bus8`, and `dso-multi` branches, on PRs (without
+push), and on `v*` git tags:
 
 - `ghcr.io/begonia-uc3/ieee9-bus/grid-central`
 - `ghcr.io/begonia-uc3/ieee9-bus/diesel-gen`

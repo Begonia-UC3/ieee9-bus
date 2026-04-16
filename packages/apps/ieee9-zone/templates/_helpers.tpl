@@ -16,14 +16,26 @@ mode value is just "diesel" for UX — map here.
 {{- end }}
 
 {{/*
-Workload name — the Deployment / Service name. Equals the image name
-so in-namespace DNS works: mode=diesel → svc/diesel-gen, mode=dso →
-svc/dso, etc. This also means two Ieee9Zone CRs with the same mode in
-the same namespace would collide — by design, one asset instance per
-outer bus.
+Workload name — the Deployment / Service name.
+
+- mode=diesel: canonical image name (`diesel-gen`). Diesel is a
+  singleton per tenant (one PV generator on bus 2), so keeping the
+  name stable means other assets can still reach it via predictable
+  in-namespace DNS.
+- mode=dso: instance-scoped (Release name minus the `zone-` prefix
+  that Cozystack adds). Lets multiple DSOs coexist in the same
+  tenant namespace — e.g. `Ieee9Zone/dso-bus8` and
+  `Ieee9Zone/dso-bus7` render as Deployments `dso-bus8` and
+  `dso-bus7`. DSOs are source-only (they POST to grid-central and
+  serve their own UI via Ingress) so losing the fixed `dso` service
+  name costs nothing.
 */}}
 {{- define "ieee9-zone.workloadName" -}}
+{{- if eq .Values.mode "dso" -}}
+{{- .Release.Name | trimPrefix "zone-" -}}
+{{- else -}}
 {{- include "ieee9-zone.imageName" . -}}
+{{- end -}}
 {{- end }}
 
 {{/*

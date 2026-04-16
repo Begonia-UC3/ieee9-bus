@@ -2,7 +2,7 @@ name: Build & publish images
 
 on:
   push:
-    branches: [main, dso, dso-bus8]
+    branches: [main, dso, dso-bus8, dso-multi]
     paths:
       - 'grid-central/**'
       - 'diesel-gen/**'

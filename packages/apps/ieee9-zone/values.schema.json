@@ -56,8 +56,9 @@
       "default": ""
     },
     "upstreamBusId": {
-      "description": "Outer-grid bus ID whose voltage DSO should use as its slack V_setpoint. Empty disables the closed loop.",
+      "description": "Outer-grid bus ID whose voltage DSO should use as its slack V_setpoint. Picks one of the available PQ buses on the IEEE-9 topology (bus 1 is slack, 2 and 3 are generators, 5 hosts datacenter). Set assetId to match (e.g. bus 7 → dso-7) so grid-central's ASSET_BUS_MAP routes the injection to the right bus.",
       "type": "string",
+      "enum": ["", "4", "6", "7", "8", "9"],
       "default": "6"
     },
     "upstreamPollSeconds": {

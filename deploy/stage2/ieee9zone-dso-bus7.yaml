@@ -1,0 +1,38 @@
+# Second click-deploy DSO — on transmission bus 7. Companion to
+# ieee9zone-dso-bus8.yaml; both live in tenant-dsos and prove the
+# multi-DSO-per-namespace capability added in the `dso-multi` branch.
+#
+# Apply order and rationale: see this directory's README.md.
+---
+apiVersion: apps.cozystack.io/v1alpha1
+kind: Ieee9Zone
+metadata:
+  name: dso-bus7
+  namespace: tenant-dsos
+spec:
+  mode: dso
+  # Pin to immutable sha-<short> on dso-multi HEAD to bypass kubelet's
+  # IfNotPresent cache (CLAUDE.md behavioural gotcha — the `:dso-multi`
+  # tag gets a new digest on every push to the branch).
+  imageTag: sha-REPLACE_AT_APPLY_TIME
+
+  modelRepoUrl: https://github.com/Begonia-UC3/dso-model.git
+  modelRepoBranch: main
+  modelPath: model.json
+  modelSyncIntervalSeconds: 30
+
+  # Bus 7 is a transmission bus (zero baseline load/gen) — adding this
+  # DSO injects load at bus 7 where there was none before.
+  assetId: dso-7
+  upstreamBusId: "7"
+  upstreamPollSeconds: 5
+
+  gridCentralUrl: http://grid-central.tenant-root:8000
+  tickInterval: "1.0"
+  replicas: 1
+
+  ingressEnabled: true
+  ingressHost: dso-bus7.cozystack-demo.org
+  ingressClassName: tenant-root
+  tlsEnabled: true
+  tlsClusterIssuer: letsencrypt-prod

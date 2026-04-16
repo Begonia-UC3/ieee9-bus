@@ -138,3 +138,53 @@ age <1 s.
 - `imagePullPolicy: IfNotPresent` + mutable `:<branch>` tags =
   stale code on the node; override to `sha-<short>` when touching
   feature-critical behaviour (behavioural gotcha).
+
+## Phase 7 — `dso-multi` branch: multiple DSOs per tenant via the dashboard
+
+Generalises the single-DSO-on-bus-8 work of phase 6 into a
+dashboard-driven "add another DSO" flow. Operator workflow reduces
+to: pick an outer bus from a dropdown, paste a model-repo URL,
+submit. No chart-authored tenant creation, no PAT plumbing, no repo
+auto-creation (the things that killed `dso-auto` stay out).
+
+Three blockers removed:
+
+1. **Workload-name collision.** `ieee9-zone`'s `_helpers.tpl`
+   derived the Deployment / Service name from `mode`, so two
+   `mode=dso` instances in the same namespace would both try to
+   become `dso`. Changed: for `mode=dso` the workload is named
+   after the instance (release name minus Cozystack's `zone-`
+   prefix). `Ieee9Zone/dso-bus8` → Deployment `dso-bus8`;
+   `Ieee9Zone/dso-bus7` → Deployment `dso-bus7`; no collision.
+   Diesel retains its canonical `diesel-gen` name (one diesel per
+   tenant is by design).
+2. **`upstreamBusId` opened up as an enum.** JSON-schema and the
+   platform's openAPISchema mirror now declare
+   `"enum": ["4","6","7","8","9"]` — IEEE-9 PQ buses minus bus 5
+   (datacenter). The Cozystack dashboard renders it as a dropdown.
+3. **`ASSET_BUS_MAP` pre-populated** with `dso-4/7/8/9` on top of
+   the existing `dso→6` and `dso-8→8`. No grid-central rebuild per
+   new DSO.
+
+Migration impact at Flux switch: the live `tenant-dsos/dso-bus8`
+release's workload renamed `dso → dso-bus8`. Helm upgrade deleted
+the old Deployment/Service, created the new ones, ingress backend
+updated — ~30 s blip. `tenant-root/dso` instance name was already
+`dso`, so after trimPrefix the workload name is still `dso` — zero
+churn there.
+
+End-state verification (two DSOs live in `tenant-dsos`):
+`dso-bus8` (bus 8) and `dso-bus7` (bus 7, transmission bus with no
+baseline load). Both converge, both close the loop — each pulls
+its outer-bus V from `grid-central.tenant-root` and drives its
+internal slack. `grid-central`'s `asset_overrides` shows `dso-7`
+and `dso-8` fresh with age < 2 s; buses 7 and 8 on
+`ieee9.cozystack-demo.org` carry the respective injections.
+`tenant-root` pods restart only for grid-central (expected: the
+new ASSET_BUS_MAP needed the bump); battery / datacenter /
+diesel-gen / dso — RESTARTS delta 0.
+
+The cross-tenant CNP pair added in phase 6 was **not** changed:
+its endpointSelector already matches *any* pod labelled
+`app.kubernetes.io/name: dso` in `tenant-dsos`, which remains true
+after the workload-rename refactor.

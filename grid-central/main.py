@@ -55,8 +55,16 @@ ASSET_BUS_MAP = {
     "diesel-gen":  2,   # Generator on Bus 2
     "battery":     3,   # Generator/load on Bus 3
     "datacenter":  5,   # Load on Bus 5
-    "dso":         6,   # DSO aggregator on Bus 6 (replaces the anonymous 90 MW load)
-    "dso-8":       8,   # Second DSO aggregator on Bus 8 (dso-bus8 branch, tenant-dsos)
+    # DSO aggregators. dso is the default / first-DSO convention on Bus 6
+    # (replaces the 90 MW anonymous load). dso-4/7/8/9 are pre-declared so
+    # operators can click-deploy an Ieee9Zone mode=dso on any idle PQ bus
+    # without rebuilding grid-central. Buses 4/7/9 are transmission (zero
+    # baseline load); bus 8 carries a 100 MW load in the base case.
+    "dso":         6,
+    "dso-4":       4,
+    "dso-7":       7,
+    "dso-8":       8,
+    "dso-9":       9,
 }
 
 S_BASE = 100.0  # MVA base

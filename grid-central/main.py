@@ -255,6 +255,21 @@ class PowerFlowEngine:
         self.V = V
         self.theta = theta
 
+        # Back-compute slack bus injection from the solved (or
+        # last-iteration) state so the dashboard shows the true slack
+        # generation (P, Q) instead of the static input P_gen[0]=0.
+        # Without this the slack bus always reads "offline" in the UI.
+        # Running this even on non-convergence is deliberate — gives
+        # operators a ballpark reading of the imbalance when the system
+        # is over-capacity, rather than a misleading zero.
+        V_c = np.array([V[k] * complex(math.cos(theta[k]), math.sin(theta[k]))
+                        for k in range(self.n)])
+        for i, btype in enumerate(self.bus_types):
+            if btype == "slack":
+                S_inj_pu = V_c[i] * np.conj(self.Y[i, :] @ V_c)
+                self.P_gen[i] = S_inj_pu.real + self.P_load[i]
+                self.Q_gen[i] = S_inj_pu.imag + self.Q_load[i]
+
         # Compute final line flows
         branch_results = []
         for fr, to, r, x, b_shunt, rate, is_xfmr in BRANCH_DATA:

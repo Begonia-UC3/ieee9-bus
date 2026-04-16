@@ -25,7 +25,11 @@ TICK_INTERVAL = float(os.getenv("TICK_INTERVAL", "1.0"))
 AUTO_MODE = os.getenv("AUTO_MODE", "true").lower() in ("1", "true", "yes")
 
 # ── Engine Model Parameters ──
-RATED_POWER_MW = 163.0
+# Uprated from IEEE-9 textbook 163 MW to 500 MW: with 3-5 DSOs
+# co-deployed each reporting ~170 MW tie load, IEEE-9 needs more
+# generation headroom near the load buses to stay inside NR's stable
+# region. AUTO_MODE walks 65-90% of rated → 325-450 MW local gen.
+RATED_POWER_MW = 500.0
 RATED_RPM = 900
 CYLINDERS = 20
 DISPLACEMENT_L = 580.0  # liters total

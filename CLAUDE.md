@@ -56,13 +56,18 @@ Side branches forked from `dso`:
   dropdown, `ASSET_BUS_MAP` pre-declares `dso-4/7/8/9`. Kept as
   stable fallback.
 - `classroom` — **current Flux target**. Forked from `dso-multi`.
-  Adds four isolated student tenants
-  (`tenant-group1..tenant-group4`), cross-tenant CNPs per tenant,
-  and V-clamp tightened back to 0.85 so that the 4th student DSO
-  deliberately fails Newton–Raphson — an explicit teaching signal
-  about grid stability. See [`deploy/classroom/README.md`](deploy/classroom/README.md)
-  for the operator runbook and [`tests/T-002-classroom.md`](tests/T-002-classroom.md)
-  for the per-group form values.
+  Originally staged four student tenants (`tenant-group1..4`) with
+  V-clamp tightened to 0.85 to force the 4th DSO off the stability
+  cliff — but the single-node cluster (12 vCPU) couldn't host four
+  full Cozystack tenants (~3.5 vCPU overhead each just for the
+  observability stack). **Downsized 2026-04-16 to two tenants**:
+  `tenant-group1` (bus 4) for student group A + `tenant-dsos`
+  (reused historical namespace, student picks bus 7/8/9) for
+  group B. The groups take turns. With only 2 concurrent DSOs the
+  4th-DSO non-convergence teaching signal no longer applies, so
+  V-clamp was widened back to `[0.80, 1.15]` for reliable
+  convergence. See [`deploy/classroom/README.md`](deploy/classroom/README.md)
+  for the operator runbook.
 - `dso-auto-archive` — a click-deploy `Ieee9ZoneAuto` kind
   (auto-allocated slot, child Cozystack `Tenant`, GitHub repo
   auto-create) that was prototyped but not shipped — the install
@@ -653,13 +658,13 @@ dashboard.
   loop in `grid-central/main.py:solve()` compute
   `S_inj = V_1 · conj(Y_1k · V_k)` and write to
   `self.P_gen[0]` / `self.Q_gen[0]`.
-- **NR V clamp depends on the branch.** `dso-multi` sets it at
-  `[0.80, 1.15]` to accommodate 3+ co-deployed DSOs.
-  **`classroom` tightens back to `[0.85, 1.15]`** on purpose — we
-  want the 4th student DSO to push at least one bus below the
-  clamp and trigger explicit non-convergence (teaching signal).
-  If `converged: false iter: 20` shows up on `classroom` after
-  four student DSOs, that's the expected outcome, not a bug.
+- **NR V clamp is `[0.80, 1.15]` on `classroom`** (same as
+  `dso-multi`). Originally tightened to 0.85 to force the 4th
+  student DSO off the cliff, but the 4-tenant classroom was cut
+  to 2 tenants on 2026-04-16 due to single-node CPU headroom —
+  so the non-convergence teaching signal no longer applies and
+  the wider clamp restores reliable convergence for the 2 teams
+  sharing the demo.
 - **Diesel-gen rated at 500 MW (uprated from 163).** Gives enough
   local generation (AUTO_MODE walks 325-450 MW) to keep the IEEE-9
   ring stable with 3 full-size DSOs. Comfortably converges at 3

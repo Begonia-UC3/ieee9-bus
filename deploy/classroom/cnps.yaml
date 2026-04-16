@@ -1,20 +1,25 @@
-# Cross-tenant CiliumNetworkPolicy pair for the four student tenants.
+# Cross-tenant CiliumNetworkPolicy pair for the classroom tenants.
 # Each student-group DSO pod (label apps.cozystack.io/application.kind=
 # Ieee9Zone) needs egress to grid-central in tenant-root, and grid-
-# central in turn needs to accept ingress from any of the four student
+# central in turn needs to accept ingress from both classroom
 # namespaces.
 #
 # Egress side cannot be collapsed — Cilium scopes endpointSelector to
-# the policy's own namespace, so we need one CNP per student tenant.
-# Ingress side is one CNP in tenant-root with a fromEndpoints entry
-# per tenant.
+# the policy's own namespace, so each student namespace needs its own
+# egress CNP. Ingress side is one CNP in tenant-root with a
+# fromEndpoints entry per participating namespace.
 #
 # Apply once per cluster after tenants.yaml has provisioned the
 # namespaces:
 #   kubectl apply -f cnps.yaml
 #
-# (The existing deploy/stage2/cnp-cross-tenant.yaml stays in place;
-# it serves the tenant-dsos sandbox and is independent of this pair.)
+# tenant-dsos already has its own egress CNP via
+# deploy/stage2/cnp-cross-tenant.yaml (applied earlier for the
+# dso-multi sandbox). No duplicate egress needed here — the ingress
+# CNP below just opens tenant-root to accept from tenant-dsos too.
+#
+# Downsized 2026-04-16 from 4 student tenants (group1..group4) to 1
+# (group1) + reuse of tenant-dsos. See deploy/classroom/README.md.
 ---
 apiVersion: cilium.io/v2
 kind: CiliumNetworkPolicy
@@ -35,67 +40,9 @@ spec:
       - port: "8000"
         protocol: TCP
 ---
-apiVersion: cilium.io/v2
-kind: CiliumNetworkPolicy
-metadata:
-  name: allow-dso-to-grid-central-tenant-root
-  namespace: tenant-group2
-spec:
-  endpointSelector:
-    matchLabels:
-      apps.cozystack.io/application.kind: Ieee9Zone
-  egress:
-  - toEndpoints:
-    - matchLabels:
-        k8s:io.kubernetes.pod.namespace: tenant-root
-        app.kubernetes.io/name: grid-central
-    toPorts:
-    - ports:
-      - port: "8000"
-        protocol: TCP
----
-apiVersion: cilium.io/v2
-kind: CiliumNetworkPolicy
-metadata:
-  name: allow-dso-to-grid-central-tenant-root
-  namespace: tenant-group3
-spec:
-  endpointSelector:
-    matchLabels:
-      apps.cozystack.io/application.kind: Ieee9Zone
-  egress:
-  - toEndpoints:
-    - matchLabels:
-        k8s:io.kubernetes.pod.namespace: tenant-root
-        app.kubernetes.io/name: grid-central
-    toPorts:
-    - ports:
-      - port: "8000"
-        protocol: TCP
----
-apiVersion: cilium.io/v2
-kind: CiliumNetworkPolicy
-metadata:
-  name: allow-dso-to-grid-central-tenant-root
-  namespace: tenant-group4
-spec:
-  endpointSelector:
-    matchLabels:
-      apps.cozystack.io/application.kind: Ieee9Zone
-  egress:
-  - toEndpoints:
-    - matchLabels:
-        k8s:io.kubernetes.pod.namespace: tenant-root
-        app.kubernetes.io/name: grid-central
-    toPorts:
-    - ports:
-      - port: "8000"
-        protocol: TCP
----
-# Single ingress CNP in tenant-root accepting from all four student
-# tenants. Each fromEndpoints entry is a separate selector — Cilium
-# OR-es them. (Cannot use a single namespace selector matching all
-# four because the namespace labels are not uniform.)
+# Ingress CNP in tenant-root accepting from both classroom
+# namespaces. Each fromEndpoints entry is a separate selector —
+# Cilium OR-es them.
 apiVersion: cilium.io/v2
 kind: CiliumNetworkPolicy
 metadata:
@@ -111,13 +58,7 @@ spec:
         k8s:io.kubernetes.pod.namespace: tenant-group1
         apps.cozystack.io/application.kind: Ieee9Zone
     - matchLabels:
-        k8s:io.kubernetes.pod.namespace: tenant-group2
-        apps.cozystack.io/application.kind: Ieee9Zone
-    - matchLabels:
-        k8s:io.kubernetes.pod.namespace: tenant-group3
-        apps.cozystack.io/application.kind: Ieee9Zone
-    - matchLabels:
-        k8s:io.kubernetes.pod.namespace: tenant-group4
+        k8s:io.kubernetes.pod.namespace: tenant-dsos
         apps.cozystack.io/application.kind: Ieee9Zone
     toPorts:
     - ports:

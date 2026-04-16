@@ -89,12 +89,14 @@ Each service ships a `Containerfile` and `requirements.txt`.
   `upstreamBusId`, `ASSET_BUS_MAP` pre-populated with
   `dso-4/7/8/9`. Stable fallback.
 - **`classroom`** — **live branch on the reference cluster** (Flux
-  `GitRepository` tracks it). Four isolated student tenants
-  (`tenant-group1..tenant-group4`), cross-tenant CNPs per tenant,
-  V-clamp tightened to 0.85 so the 4th concurrent student DSO
-  deliberately fails Newton–Raphson — a teaching signal about
-  grid stability. Operator runbook at `deploy/classroom/README.md`;
-  per-group form values at `tests/T-002-classroom.md`.
+  `GitRepository` tracks it). Two isolated student tenants sharing
+  by turns: `tenant-group1` (bus 4) for one group + `tenant-dsos`
+  (student picks bus 7/8/9) for another. Originally staged 4
+  tenants with V-clamp tightened to 0.85 to make the 4th DSO fail
+  NR as a teaching signal, but the single-node cluster (12 vCPU)
+  could not host 4 full Cozystack tenants — downsized to 2 on
+  2026-04-16 and V-clamp widened back to `[0.80, 1.15]`. Operator
+  runbook at `deploy/classroom/README.md`.
 - **`distributed`**, **`dso-auto-archive`** — reference-only
   experiments (one-kind-per-asset, and click-deploy auto-provisioning
   respectively). Neither is merged anywhere.

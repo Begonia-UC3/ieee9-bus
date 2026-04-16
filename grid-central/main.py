@@ -250,7 +250,7 @@ class PowerFlowEngine:
                 theta[i] += dx[ii]
             for ii, i in enumerate(pq_buses):
                 V[i] += dx[n_p + ii] * V[i]  # dV/V correction
-                V[i] = max(0.85, min(1.15, V[i]))  # classroom tuning: tightened back from 0.80 → 0.85. We want NR to refuse convergence when the 4th student-DSO pushes at least one bus below the stability threshold — an explicit "grid collapsed" teaching signal rather than a silent low-V solution.
+                V[i] = max(0.80, min(1.15, V[i]))  # widened back to 0.80 for the 2-tenant demo (group1 + dsos). 0.85 was calibrated for 4 student DSOs to force the 4th off the cliff; with 2 concurrent DSOs reliable convergence matters more than the non-convergence teaching signal.
 
         self.V = V
         self.theta = theta

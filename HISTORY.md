@@ -282,3 +282,61 @@ live in [`tests/T-002-classroom.md`](tests/README.md).
 is theoretical. Expected to need 1–2 empirical passes to settle
 exactly (tighten to 0.87 if 4 DSOs still converge, widen to 0.83
 if 3 already break). Iteration trail captured in T-002.
+
+## Phase 9 — Classroom downsize to 2 tenants (2026-04-16)
+
+The 4-tenant plan hit a hard wall at deploy time. First cleanup of
+the dtu-cluster (Hetzner single Talos node, 12 vCPU) showed the
+observability stack that Cozystack provisions per `Tenant`
+(vmstorage × 2 classes, vmselect, vmagent, vmalert,
+vmalertmanager × 3, vlogs, Grafana HA pair, Alerta HA pair,
+CNPG Postgres clusters for Grafana and Alerta) costs ~3.5 vCPU
+of CPU *requests* per tenant — which, on top of the base
+tenant-root sim (~3.5 vCPU) and Cozystack platform itself
+(~4.5 vCPU for kubevirt, Flux, VPA, dashboard, cluster-api,
+kubeovn, etcd-operator, etc.), left negative headroom on 4
+student tenants. Three of the four tenant-groupN tenants sat
+with half their pods in `Pending: 0/1 nodes are available: 1
+Insufficient cpu` indefinitely.
+
+Operator decision: ship the demo on two concurrent DSOs rather
+than add a second node under time pressure. Three of the four
+student tenants (`tenant-group2..4`) deleted — Cozystack's
+cleanup job handled the HR cascade once the `monitoring-system`
+HR (stuck in a 10-minute Helm install lock after the initial
+CPU-pressure install timeout) was force-deleted manually. The
+fourth, `tenant-group1`, recovered on its own once the CPU
+pressure eased (monitoring-system re-installed cleanly via
+Flux's standard install-remediation loop). Second classroom
+tenant slot absorbed into the existing `tenant-dsos` namespace
+(already present from Phase 6/7; its historical
+`Ieee9Zone/dso-bus7` and `dso-bus8` had already been cleared in
+step 3 of the classroom apply order). Net: two tenants for two
+student groups, who take turns.
+
+Physics consequence: with at most two concurrent DSOs the
+"4th DSO fails NR" teaching signal is unreachable, so the V-clamp
+tightening from `dso-multi`'s `[0.80, 1.15]` is undone — the
+classroom branch now matches `dso-multi` on this knob. Reliable
+convergence for 2 DSOs wins over the theoretical non-convergence
+demo that the CPU envelope made impossible anyway.
+
+Repo-side edits driven by this downsize:
+
+- `grid-central/main.py` — V-clamp `max(0.85, …)` → `max(0.80, …)`
+  with a comment explaining the 2-tenant rationale.
+- `deploy/classroom/tenants.yaml` — dropped `group2`, `group3`,
+  `group4` Tenant CRs; only `group1` remains.
+- `deploy/classroom/cnps.yaml` — dropped the three unused egress
+  CNPs; ingress CNP in `tenant-root` now accepts from
+  `tenant-group1` + `tenant-dsos`.
+- `deploy/classroom/README.md` — rewritten runbook (apply order,
+  per-group form table with 2 rows, physics calibration).
+- `CLAUDE.md` + `README.md` — branch description updated; V-clamp
+  gotcha updated.
+
+`tests/T-002-classroom.md` is left as a historical artefact
+(4-tenant scenario, not achievable on the current cluster) — kept
+because the per-group form values for buses 4/7/8/9 stay valid
+for the live 2-tenant demo (group A uses row 1, group B picks
+one of rows 2/3/4).

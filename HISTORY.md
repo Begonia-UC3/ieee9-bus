@@ -193,13 +193,30 @@ both CNPs to match on the Cozystack-provided pod label
 the rename, and in `tenant-dsos` equivalent to "all DSOs" since no
 diesel lives there. Documented in `deploy/stage2/cnp-cross-tenant.yaml`.
 
-**Observed physical limit at three co-deployed DSOs.** With three
-`Ieee9Zone mode: dso` instances (bus 6 / 7 / 8) all pulling the
-same 168 MW aggregate feeder from `Begonia-UC3/dso-model` main,
-total IEEE-9 transmission load (~575 MW) exceeds available
-generation headroom and grid-central reports
-`converged: false iter: 20` with bus voltages depressed to
-~0.85-0.93 pu. Not a chart regression — pure physics. For a
-production-ish 3+ DSO setup, each operator would bring a smaller
-feeder model; the mechanism (distinct workloads, routed overrides,
-closed-loop feedback per bus) is validated regardless.
+**Physical headroom for multi-DSO.** Three 170 MW DSOs + datacenter
+pushed the IEEE-9 textbook numbers past their stable range —
+`converged: false iter: 20`, voltages clamped at 0.85 pu. Three
+small follow-up commits fix this without abandoning the test:
+
+- `b5deae3` ports the slack-bus P/Q back-fill from
+  `dso-auto-archive` (slack was rendering `p_gen=0 status=offline`
+  in the dashboard; back-fill computes `S_inj = V_1 · conj(Y_1k·V_k)`
+  after the NR loop whether or not it converged, so operators see
+  the real imbalance), and uprates diesel-gen's `RATED_POWER_MW`
+  163 → 500 so AUTO_MODE walks 325-450 MW of local generation.
+- `1a93d28` widens the NR V clamp from 0.85 → 0.80 pu. The 0.85
+  ceiling was blocking physically-valid low-V solutions under heavy
+  load — NR steps hit the clamp, the Jacobian update got the wrong
+  derivative, iterations maxed out with an infeasible all-buses-at-
+  clamp state. 0.80 is the grid-collapse threshold; PQ buses that
+  hit it still render `status=undervoltage` on the dashboard.
+
+With those applied, three DSOs (bus 6, 7, 8) converge in 5
+iterations; slack transfers dropped from 533 → 142 MW; bus
+voltages settle at 0.94-1.02 pu (all nominal). Diesel runs near
+the top of its AUTO-walk (≈449/450 MW) — fine for 3 DSOs, likely
+needs further uprate (or a second dispatchable gen) if 4-5 DSOs
+get click-deployed concurrently. The `asset_overrides` in
+grid-central persist forever (behavioural gotcha), so even deleted
+DSOs keep "pulling" load until grid-central itself restarts —
+worth noting if tuning the load mix.

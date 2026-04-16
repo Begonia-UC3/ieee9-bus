@@ -634,6 +634,27 @@ dashboard.
   value. Entries never expire — a dead asset looks identical to a
   live one holding a steady setpoint until `grid-central` itself
   restarts. Keep this in mind when debugging "frozen power flow".
+- **Slack bus generation is back-computed after NR.** Without the
+  back-fill, `P_gen[0]` stays at its static input (0) and the
+  dashboard renders bus 1 as `offline`. The back-fill runs after
+  the NR loop exits *whether or not it converged* — so when the
+  system is overloaded the operator still sees a ballpark
+  imbalance rather than a misleading zero. Code: just after the NR
+  loop in `grid-central/main.py:solve()` compute
+  `S_inj = V_1 · conj(Y_1k · V_k)` and write to
+  `self.P_gen[0]` / `self.Q_gen[0]`.
+- **NR V clamp is 0.80–1.15 pu.** Widened from the original 0.85–1.15
+  because 3+ co-deployed DSOs can push physically-valid bus
+  voltages below 0.85; clamping at 0.85 blocks NR from finding the
+  true solution (Jacobian update gets the wrong derivative,
+  iterations max out). 0.80 is the grid-collapse threshold — if a
+  bus genuinely hits it, the dashboard flags it
+  `status=undervoltage`.
+- **Diesel-gen rated at 500 MW (uprated from 163).** Gives enough
+  local generation (AUTO_MODE walks 325-450 MW) to keep the IEEE-9
+  ring stable with 3 full-size DSOs. Comfortably converges at 3
+  DSOs; 4-5 concurrent DSOs may need a further uprate or a second
+  dispatchable generator.
 - **`imagePullPolicy: IfNotPresent` + mutable branch tags = stale
   code on the node.** The chart defaults to `IfNotPresent`. When CI
   rebuilds `:<branch>` for an existing branch (e.g. `:dso` gets a

@@ -220,3 +220,14 @@ get click-deployed concurrently. The `asset_overrides` in
 grid-central persist forever (behavioural gotcha), so even deleted
 DSOs keep "pulling" load until grid-central itself restarts —
 worth noting if tuning the load mix.
+
+**Click-deploy path validated end-to-end on 2026-04-16** — operator
+deleted `tenant-dsos/dso-bus7`, re-created it from the Cozystack
+dashboard form (populating the fields documented in CLAUDE.md),
+submit succeeded, HelmRelease installed, closed-loop feedback
+recovered within one upstream-poll cycle. Full procedure, pass
+criteria and gotchas surfaced during the run are logged in
+[`tests/README.md#T-001`](tests/README.md). Three new topic docs
+(`docs/newton-raphson.md`, `docs/topology.md`,
+`docs/multitenant.md`) fan out the physics and architecture that
+don't belong in the project README.

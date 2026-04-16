@@ -237,6 +237,11 @@ their CR `metadata.name` differs.
 
 ### Adding a DSO via the dashboard (branch `dso-multi`)
 
+> End-to-end validated 2026-04-16 — see
+> [`tests/README.md#T-001`](tests/README.md) for the field-by-field
+> form values and verification commands.
+
+
 From the Cozystack dashboard **Simulation → IEEE 9-Bus Zone →
 Create** form:
 

@@ -238,5 +238,13 @@ and uses it as the DSO's internal slack setpoint.
 
 - `CLAUDE.md` — detailed repo guide, deployment, CI, gotchas.
 - `HISTORY.md` — phase-by-phase project arc.
-- `deploy/stage2/README.md` — how to bring up the second DSO (bus 8).
+- `docs/newton-raphson.md` — power-flow solver explained, both the
+  IEEE-9 one and the nested DSO one.
+- `docs/topology.md` — IEEE-9 bus/branch/asset reference table.
+- `docs/multitenant.md` — how the simulation splits across Cozystack
+  tenants (and what's deliberately left for a future branch).
+- `deploy/stage2/README.md` — how to bring up a second/third DSO by
+  hand (the CR and CNP manifests that complement the chart).
+- `tests/README.md` — manual-test log; T-001 validates the
+  click-deploy flow end-to-end.
 - Upstream pattern: <https://github.com/cozystack/external-apps-example/pull/2>.

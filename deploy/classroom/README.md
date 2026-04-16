@@ -20,7 +20,9 @@ given time.
 > reliable convergence.
 
 This folder is the cluster-state side; the chart + CI live on the
-`classroom` branch.
+`classroom` branch. Student-facing task description is in
+[`assignment.md`](assignment.md) — share that with the students,
+keep this README for yourself.
 
 ## Apply order
 

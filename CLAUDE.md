@@ -244,20 +244,101 @@ spec:
   tlsClusterIssuer: letsencrypt-prod
 ```
 
-**Stage 1** (current): pure boot test — confirm the pod runs, the
-git-sync sidecar pulls the model, and the DSO's internal
-Newton-Raphson converges. `gridCentralUrl` is left at the in-namespace
-default (`http://grid-central:8000`); since `tenant-dsos` has no such
-service, the upstream POSTs DNS-fail harmlessly and the DSO renders
-its own dashboard standalone. No changes to `tenant-root`.
+**Stage 1**: pure boot test — confirm the pod runs, the git-sync
+sidecar pulls the model, and the DSO's internal Newton-Raphson
+converges. `gridCentralUrl` is left at the in-namespace default
+(`http://grid-central:8000`); since `tenant-dsos` has no such service,
+the upstream POSTs DNS-fail harmlessly and the DSO renders its own
+dashboard standalone. No changes to `tenant-root`.
 
-**Stage 2** (future PR): closed-loop wiring. Will require:
-1. Add `"dso-8": 8` to `ASSET_BUS_MAP` in `grid-central/main.py`.
-2. Set `assetId: dso-8`, `upstreamBusId: "8"`,
-   `gridCentralUrl: http://grid-central.tenant-root.svc.cluster.local:8000`
-   on the CR.
-3. Verify Cozystack's inter-tenant CiliumNetworkPolicy allows the
-   POST from `tenant-dsos` to `tenant-root` (may need an allow rule).
+**Stage 2**: closed-loop wiring to root `grid-central` cross-namespace.
+Three independent pieces:
+
+1. **`ASSET_BUS_MAP` entry** (`grid-central/main.py`):
+   `"dso-8": 8`. Without this, POSTs with `asset_id=dso-8` return
+   `{"status":"ok","bus":null}` and the injection is silently
+   discarded (documented behavioural gotcha). A new
+   `grid-central:dso-bus8` image is built by CI when `dso-bus8` is
+   in `.github/workflows/images.yaml` `push.branches`.
+
+2. **CR settings on `Ieee9Zone/dso-bus8`**:
+
+   ```yaml
+   spec:
+     mode: dso
+     assetId: dso-8
+     upstreamBusId: "8"
+     gridCentralUrl: http://grid-central.tenant-root:8000
+     imageTag: dso              # dso image itself unchanged
+     # ... rest as in the stage-1 template above
+   ```
+
+   Note the **short DNS form** `grid-central.tenant-root`. The cluster
+   domain is `cozy.local` (not `cluster.local`), so the full FQDN is
+   `grid-central.tenant-root.svc.cozy.local`; the short form relies on
+   the pod's DNS search list (`tenant-dsos.svc.cozy.local
+   svc.cozy.local cozy.local`).
+
+3. **Two CiliumNetworkPolicies** to open the cross-tenant channel.
+   Cozystack's default `allow-internal-communication` scopes
+   `fromEndpoints: [{}]` to the policy's own namespace only, and
+   `allow-external-communication`'s `fromEntities: [cluster]` does
+   not, in practice, cover arbitrary pod-to-pod traffic — cross-tenant
+   TCP times out until both of these are applied:
+
+   ```yaml
+   # egress in tenant-dsos: allow the dso pod to reach grid-central in tenant-root
+   apiVersion: cilium.io/v2
+   kind: CiliumNetworkPolicy
+   metadata:
+     name: allow-dso-to-grid-central-tenant-root
+     namespace: tenant-dsos
+   spec:
+     endpointSelector:
+       matchLabels: { app.kubernetes.io/name: dso }
+     egress:
+     - toEndpoints:
+       - matchLabels:
+           k8s:io.kubernetes.pod.namespace: tenant-root
+           app.kubernetes.io/name: grid-central
+       toPorts:
+       - ports: [{ port: "8000", protocol: TCP }]
+   ---
+   # ingress in tenant-root: accept from the dso pod in tenant-dsos
+   apiVersion: cilium.io/v2
+   kind: CiliumNetworkPolicy
+   metadata:
+     name: allow-from-tenant-dsos-dso-to-grid-central
+     namespace: tenant-root
+   spec:
+     endpointSelector:
+       matchLabels: { app.kubernetes.io/name: grid-central }
+     ingress:
+     - fromEndpoints:
+       - matchLabels:
+           k8s:io.kubernetes.pod.namespace: tenant-dsos
+           app.kubernetes.io/name: dso
+       toPorts:
+       - ports: [{ port: "8000", protocol: TCP }]
+   ```
+
+   Both CNPs must be present; missing either blocks the flow (Cilium
+   requires both endpoints to allow). The namespace matcher
+   `k8s:io.kubernetes.pod.namespace` is Cilium's way of scoping the
+   selector to a specific namespace.
+
+   Kept as hand-applied manifests (not chart-rendered) for the first
+   iteration — they're cluster-scoped operator concern, and
+   cross-namespace chart rendering added significant complexity on
+   the abandoned `dso-auto` attempt. If a second cross-tenant DSO
+   ever lands (`dso-4`, `dso-7`, `dso-9`), revisit and move into the
+   `ieee9-zone` chart.
+
+After stage 2 is live: POST `asset_id=dso-8` returns
+`{"status":"ok","bus":8}`; bus 8 on `ieee9.cozystack-demo.org`
+dashboard reflects `dso-bus8`'s tie injection; `dso-bus8`'s
+`/api/status.last_solve.upstream_feedback` shows the polled V@bus-8
+driving its internal slack setpoint.
 
 ### DSO mode specifics
 
@@ -395,6 +476,25 @@ new findings.
    branch that wants to deploy from the cluster must be added to
    that list, otherwise pods sit in `ImagePullBackOff` on the
    nonexistent default `:0.1.0` tag.
+10. **Cross-tenant traffic needs *both* egress and ingress CNPs.**
+    Cozystack's stock `allow-internal-communication`
+    (`fromEndpoints: [{}]`) scopes to the policy's own namespace
+    only, and `allow-external-communication`'s
+    `fromEntities: [cluster]` does not, in practice, cover arbitrary
+    pod-to-pod cross-namespace TCP. Without a dedicated opt-in CNP
+    pair, TCP from a tenant-A pod to a tenant-B Service TIMES OUT
+    silently (DNS resolves fine — it's an L4 drop, not an L7 error).
+    Template for the pair: see the "Second DSO on bus 8" → Stage 2
+    section. Both sides select by
+    `app.kubernetes.io/name` and scope cross-namespace via
+    `k8s:io.kubernetes.pod.namespace: <target>`. Missing either side
+    = still blocked.
+11. **Cluster DNS domain is `cozy.local`, not `cluster.local`.**
+    `/etc/resolv.conf` in tenant pods shows
+    `search <tenant-ns>.svc.cozy.local svc.cozy.local cozy.local`.
+    FQDN `<svc>.<ns>.svc.cluster.local` fails DNS. Use either the
+    short form `<svc>.<ns>` (relies on the search list) or the
+    explicit `<svc>.<ns>.svc.cozy.local`.
 
 ## Things to be careful about
 
@@ -474,6 +574,19 @@ dashboard.
   value. Entries never expire — a dead asset looks identical to a
   live one holding a steady setpoint until `grid-central` itself
   restarts. Keep this in mind when debugging "frozen power flow".
+- **`imagePullPolicy: IfNotPresent` + mutable branch tags = stale
+  code on the node.** The chart defaults to `IfNotPresent`. When CI
+  rebuilds `:<branch>` for an existing branch (e.g. `:dso` gets a
+  new digest after a dso-branch push), a node that already cached
+  `:<branch>` under its previous digest keeps serving the old
+  image — kubelet does not re-pull on spec-identical Deployment
+  updates. Symptom: new pod rolls out cleanly, features on HEAD
+  missing at runtime. Fix: override `spec.imageTag` to an immutable
+  `sha-<short>` tag on the CR (each build gets a unique sha tag, so
+  kubelet is forced to pull). Example from dso-bus8 stage-2 recon:
+  `:dso` was 14 KB, `:sha-73d2ca7` was 19 KB; same pull path, same
+  branch, different content. Discovered when closed-loop
+  `upstream_feedback` was missing despite living in dso-branch HEAD.
 - **DSO model hot-reload triggers on mtime.** git-sync atomically
   swaps the `current` symlink, but the watched file's mtime may or may
   not change depending on the git object actually changing. If pushes

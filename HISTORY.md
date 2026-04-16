@@ -102,16 +102,39 @@ outer bus 8 — the only remaining idle PQ load slot on IEEE-9
 `ieee9-zone` chart needs no changes; everything is wired on the
 CR.
 
-**Stage 1 (this branch):** open-loop deploy. Confirms the pod
-boots, git-sync pulls the model, the DSO's internal Newton-Raphson
-converges, and the dashboard renders at
-`dso-bus8.cozystack-demo.org`. `gridCentralUrl` is left at the
-in-namespace default and DNS-fails harmlessly in `tenant-dsos`.
-`tenant-root` is not touched.
+**Stage 1:** open-loop deploy. Confirmed the pod boots, git-sync
+pulls the model, the DSO's internal Newton-Raphson converges, and
+the dashboard renders at `dso-bus8.cozystack-demo.org`.
+`gridCentralUrl` left at the in-namespace default and DNS-failed
+harmlessly in `tenant-dsos`. `tenant-root` untouched.
 
-**Stage 2 (separate PR):** closed-loop wiring. Will add
-`"dso-8": 8` to `ASSET_BUS_MAP` in `grid-central/main.py`, set the
-CR's `assetId: dso-8`, `upstreamBusId: "8"`, and
-`gridCentralUrl: http://grid-central.tenant-root.svc.cluster.local:8000`,
-and verify Cozystack's inter-tenant CiliumNetworkPolicy permits
-the cross-namespace POST.
+**Stage 2 (commit `bc347e4`, same branch):** closed-loop wiring.
+Added `"dso-8": 8` to `ASSET_BUS_MAP` in `grid-central/main.py` and
+put `dso-bus8` on `.github/workflows/images.yaml` `push.branches`
+(CI now builds `:dso-bus8` tag per push). On the cluster:
+Ieee9Grid/demo `imageTag: dso-bus8` (rolled new grid-central with
+the updated ASSET_BUS_MAP — pod restart, no client-visible
+downtime); Ieee9Zone/dso-bus8 upgraded with `assetId: dso-8`,
+`upstreamBusId: "8"`,
+`gridCentralUrl: http://grid-central.tenant-root:8000`,
+`imageTag: sha-73d2ca7` (forced immutable digest to bypass the
+`IfNotPresent` cache — see behavioural gotcha added in this phase);
+two hand-applied CiliumNetworkPolicies opened the cross-tenant
+channel (templates in CLAUDE.md stage-2 section).
+
+End-state verified: dso-bus8 tie injection 181 MW at bus 8 visible
+on `ieee9.cozystack-demo.org`; bus-8 V ≈0.970 pu driving dso-bus8's
+internal slack setpoint (upstream_feedback age ≈0.2 s); existing
+bus-6 DSO unchanged (tie 171 MW, `asset_id=dso`). Both DSOs
+operating in parallel, both reporting fresh to grid-central with
+age <1 s.
+
+**Gotchas surfaced during stage 2 recon (added to CLAUDE.md):**
+- Cross-tenant L4 traffic is default-blocked despite stock
+  Cozystack CNPs reading permissive; opt-in CNP pair required
+  (platform gotcha #10).
+- Cluster DNS domain is `cozy.local`, not `cluster.local` (platform
+  gotcha #11).
+- `imagePullPolicy: IfNotPresent` + mutable `:<branch>` tags =
+  stale code on the node; override to `sha-<short>` when touching
+  feature-critical behaviour (behavioural gotcha).
